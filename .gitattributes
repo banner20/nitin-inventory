@@ -1,0 +1,7 @@
+# Keep the repo LF regardless of who checks it out. Windows working copies
+# still get CRLF locally; only the stored blobs are normalised.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.woff2 binary

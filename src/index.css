@@ -1,0 +1,86 @@
+@import 'tailwindcss';
+
+/*
+  Dark-first on purpose. This app gets used in dim store rooms and on loading
+  docks before sunrise; a white screen at 5am is genuinely unpleasant. High
+  contrast, large hit targets, no thin type.
+*/
+@theme {
+  --color-ink-950: #080d18;
+  --color-ink-900: #0f172a;
+  --color-ink-850: #151f36;
+  --color-ink-800: #1e293b;
+  --color-ink-700: #334155;
+  --color-ink-600: #475569;
+  --color-ink-400: #94a3b8;
+  --color-ink-200: #e2e8f0;
+
+  --color-brand-400: #38bdf8;
+  --color-brand-500: #0ea5e9;
+  --color-brand-600: #0284c7;
+
+  --color-good-500: #22c55e;
+  --color-warn-500: #f59e0b;
+  --color-bad-500: #ef4444;
+
+  --radius-card: 0.875rem;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-ink-950 text-ink-200 antialiased;
+    font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    /* Respect notches and the iOS home indicator when installed. */
+    padding: env(safe-area-inset-top) env(safe-area-inset-right)
+      env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+
+  /* Numbers line up in the master sheet and every quantity column. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-brand-400;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-ink-900 border border-ink-800 rounded-card;
+  }
+
+  /*
+    44px minimum — thumb targets for people wearing gloves.
+    Compose in markup: class="btn btn-primary". Tailwind v4 can't @apply a
+    custom class, so the variants only carry their own colours.
+  */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 min-h-11 px-4 rounded-lg
+           font-semibold transition-colors disabled:opacity-40
+           disabled:pointer-events-none;
+  }
+
+  .btn-primary {
+    @apply bg-brand-500 text-ink-950 hover:bg-brand-400;
+  }
+
+  .btn-ghost {
+    @apply bg-ink-800 text-ink-200 hover:bg-ink-700;
+  }
+
+  .btn-danger {
+    @apply bg-bad-500 text-white hover:opacity-90;
+  }
+
+  .input {
+    @apply w-full min-h-11 px-3 rounded-lg bg-ink-850 border border-ink-700
+           text-ink-200 placeholder:text-ink-600
+           focus:border-brand-500 focus:outline-none;
+  }
+}
