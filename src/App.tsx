@@ -10,6 +10,8 @@ import LoginScreen from '@/features/auth/LoginScreen'
 import CrewHome from '@/features/crew/CrewHome'
 import Me from '@/features/crew/Me'
 import People from '@/features/admin/People'
+import MasterSheet from '@/features/admin/MasterSheet'
+import StockIn from '@/features/admin/StockIn'
 
 function LoginRoute() {
   const { session, profile } = useAuth()
@@ -50,15 +52,8 @@ function Routing() {
         {/* Admin console — desktop, manager and admin only */}
         <Route element={<RequireManager />}>
           <Route path="admin" element={<AdminShell />}>
-            <Route
-              index
-              element={
-                <Placeholder title="Master sheet" milestone="M1">
-                  Every item with owned / out / available, inline editing, bulk
-                  actions and CSV in and out.
-                </Placeholder>
-              }
-            />
+            <Route index element={<MasterSheet />} />
+            <Route path="stock-in" element={<StockIn />} />
             <Route
               path="search"
               element={

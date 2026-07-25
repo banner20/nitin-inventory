@@ -54,6 +54,19 @@ export interface ItemAvailability {
   qty_quarantined: number
   qty_available: number
   below_min: boolean
+  /** Carried through so the UI can search the way people actually talk. */
+  aliases: string[]
+  sku: string | null
+  category_name: string | null
+}
+
+/** Does this item match what someone typed, by name, alias or SKU? */
+export function itemMatches(item: ItemAvailability, needle: string): boolean {
+  const n = needle.trim().toLowerCase()
+  if (!n) return true
+  if (item.name.toLowerCase().includes(n)) return true
+  if (item.sku?.toLowerCase().includes(n)) return true
+  return item.aliases.some((a) => a.toLowerCase().includes(n))
 }
 
 export interface EventRecord {
