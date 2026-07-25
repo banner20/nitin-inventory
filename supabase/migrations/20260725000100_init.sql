@@ -87,6 +87,23 @@ create table categories (
   sort  integer not null default 0
 );
 
+-- Postgres marks array_to_string() STABLE rather than IMMUTABLE, so it can't
+-- be used directly in a generated column. Joining a text[] with a literal
+-- separator genuinely is deterministic, so we wrap it in an immutable function
+-- and use that instead of falling back to a trigger-maintained column.
+create or replace function public.item_search_text(
+  p_name text, p_sku text, p_aliases text[]
+)
+returns text
+language sql
+immutable
+parallel safe
+as $$
+  select coalesce(p_name, '') || ' ' ||
+         coalesce(p_sku, '') || ' ' ||
+         coalesce(array_to_string(p_aliases, ' '), '');
+$$;
+
 create table items (
   id           uuid primary key default gen_random_uuid(),
   name         text not null,
@@ -103,10 +120,7 @@ create table items (
   -- Full-text over name + sku + aliases. 'simple' rather than 'english' so
   -- that "PAR" isn't stemmed into something unrecognisable.
   search_vec   tsvector generated always as (
-    to_tsvector(
-      'simple',
-      coalesce(name, '') || ' ' || coalesce(sku, '') || ' ' || array_to_string(aliases, ' ')
-    )
+    to_tsvector('simple', public.item_search_text(name, sku, aliases))
   ) stored
 );
 
@@ -207,8 +221,14 @@ create index txn_lines_item_idx on txn_lines (item_id);
 
 -- One line per item per condition. Forces the UI to merge quantities rather
 -- than silently stacking two lines for the same thing.
+--
+-- NULLS NOT DISTINCT matters here: condition is null on every non-IN line, and
+-- under the default rule two nulls count as different values, so the
+-- constraint would quietly do nothing for exactly the transactions (OUT, ADD)
+-- where duplicate lines are most likely.
 create unique index txn_lines_unique_item
-  on txn_lines (txn_id, item_id, coalesce(condition::text, '-'), from_quarantine);
+  on txn_lines (txn_id, item_id, condition, from_quarantine)
+  nulls not distinct;
 
 -- Enforce the per-type shape of a line. Cheaper to reject here than to explain
 -- a nonsensical report later.
