@@ -10,7 +10,12 @@ export type UserRole = 'crew' | 'manager' | 'admin'
 export type TxnType = 'OUT' | 'IN' | 'ADD' | 'WRITEOFF' | 'REPAIR'
 export type TxnStatus = 'draft' | 'posted' | 'void'
 export type TxnSource = 'manual' | 'nl' | 'photo' | 'import'
-export type LineCondition = 'ok' | 'damaged' | 'lost'
+/**
+ * Why a line came back the way it did. Everything except `ok` and `damaged`
+ * reduces what the company owns — they are separate so the books can tell
+ * normal trading apart from breakage apart from stock nobody can account for.
+ */
+export type LineCondition = 'ok' | 'damaged' | 'consumed' | 'wasted' | 'lost'
 export type EventStatus = 'planned' | 'out' | 'closed' | 'cancelled'
 
 export interface Profile {
@@ -165,9 +170,15 @@ export interface OpenBalance {
   qty_back: number
   qty_damaged: number
   qty_lost: number
+  qty_returned: number
+  qty_consumed: number
+  qty_wasted: number
   outstanding: number
   item_name: string
   unit: string
+  kind: ItemKind
+  pack_size: number
+  pack_label: string | null
   event_name: string
   ends_at: string
   overdue: boolean

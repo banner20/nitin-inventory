@@ -9,6 +9,9 @@ import AdminShell from '@/components/AdminShell'
 import LoginScreen from '@/features/auth/LoginScreen'
 import CrewHome from '@/features/crew/CrewHome'
 import Me from '@/features/crew/Me'
+import TakeOut from '@/features/crew/TakeOut'
+import BringBack from '@/features/crew/BringBack'
+import Events from '@/features/admin/Events'
 import People from '@/features/admin/People'
 import MasterSheet from '@/features/admin/MasterSheet'
 import StockIn from '@/features/admin/StockIn'
@@ -28,24 +31,8 @@ function Routing() {
         {/* Crew app — phone first */}
         <Route element={<CrewShell />}>
           <Route index element={<CrewHome />} />
-          <Route
-            path="out"
-            element={
-              <Placeholder title="Take out" milestone="M2">
-                Pick an event, search the master sheet, build a basket and post it
-                to the ledger.
-              </Placeholder>
-            }
-          />
-          <Route
-            path="in"
-            element={
-              <Placeholder title="Bring back" milestone="M2">
-                Opens pre-filled with exactly what went out — one tap returns
-                everything, and you only touch the lines that differ.
-              </Placeholder>
-            }
-          />
+          <Route path="out" element={<TakeOut />} />
+          <Route path="in" element={<BringBack />} />
           <Route path="me" element={<Me />} />
         </Route>
 
@@ -71,15 +58,7 @@ function Routing() {
                 </Placeholder>
               }
             />
-            <Route
-              path="events"
-              element={
-                <Placeholder title="Events" milestone="M2">
-                  The calendar, close-out delta reports and the availability
-                  conflict overlay.
-                </Placeholder>
-              }
-            />
+            <Route path="events" element={<Events />} />
             <Route path="people" element={<People />} />
           </Route>
         </Route>

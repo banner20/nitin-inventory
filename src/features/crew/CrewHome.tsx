@@ -3,6 +3,7 @@ import { useAuth } from '@/features/auth/AuthProvider'
 import { useAsync } from '@/lib/useAsync'
 import { fetchMyOpenBalances } from '@/lib/queries'
 import { IconIn, IconOut } from '@/components/icons'
+import { formatPacks } from '@/lib/types'
 
 /**
  * "What am I still holding?" — the question the whole app exists to answer,
@@ -17,7 +18,9 @@ export default function CrewHome() {
   )
 
   const balances = data ?? []
-  const totalItems = balances.reduce((sum, b) => sum + b.outstanding, 0)
+  // Count distinct things, not quantities: adding 3000 ml of gin to 5 limes
+  // gives a number that means nothing.
+  const totalItems = balances.length
   const overdue = balances.filter((b) => b.overdue)
 
   // Group by event so it reads like "this job, these things".
@@ -94,8 +97,11 @@ export default function CrewHome() {
                 {lines.map((line) => (
                   <li key={line.item_id} className="px-3 py-2 flex justify-between gap-3 text-sm">
                     <span className="text-ink-200 truncate">{line.item_name}</span>
-                    <span className="tabular text-ink-400 shrink-0">
-                      {line.outstanding} {line.unit}
+                    <span
+                      className="tabular text-ink-400 shrink-0"
+                      title={`${line.outstanding} ${line.unit}`}
+                    >
+                      {formatPacks(line.outstanding, line)}
                     </span>
                   </li>
                 ))}
