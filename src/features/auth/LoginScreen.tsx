@@ -1,29 +1,30 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { useAuth } from './AuthProvider'
-import { AuthError, PIN_LENGTH } from '@/lib/auth'
+import { AuthError } from '@/lib/auth'
 
 /**
- * Two fields, big targets, numeric keypad for the PIN. This screen gets used
- * on a loading dock with cold hands — nothing clever belongs here.
+ * Two fields, big targets. This screen gets used on a loading dock with cold
+ * hands — nothing clever belongs here.
  */
 export default function LoginScreen() {
   const { signIn } = useAuth()
   const [empCode, setEmpCode] = useState('')
-  const [pin, setPin] = useState('')
+  const [password, setPassword] = useState('')
+  const [show, setShow] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const pinRef = useRef<HTMLInputElement>(null)
+  const passwordRef = useRef<HTMLInputElement>(null)
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
     setError(null)
     setBusy(true)
     try {
-      await signIn(empCode, pin)
+      await signIn(empCode, password)
     } catch (err) {
       setError(err instanceof AuthError ? err.message : 'Could not sign in. Try again.')
-      setPin('')
-      pinRef.current?.focus()
+      setPassword('')
+      passwordRef.current?.focus()
     } finally {
       setBusy(false)
     }
@@ -59,20 +60,27 @@ export default function LoginScreen() {
           </div>
 
           <div className="space-y-1.5">
-            <label htmlFor="pin" className="text-sm font-medium text-ink-400">
-              PIN
-            </label>
+            <div className="flex items-baseline justify-between">
+              <label htmlFor="password" className="text-sm font-medium text-ink-400">
+                Password
+              </label>
+              <button
+                type="button"
+                onClick={() => setShow((s) => !s)}
+                className="text-xs text-ink-400 hover:text-ink-200"
+              >
+                {show ? 'Hide' : 'Show'}
+              </button>
+            </div>
             <input
-              id="pin"
-              ref={pinRef}
-              className="input tracking-[0.5em] text-lg tabular"
-              value={pin}
-              onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, PIN_LENGTH))}
-              type="password"
-              inputMode="numeric"
+              id="password"
+              ref={passwordRef}
+              className="input"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              type={show ? 'text' : 'password'}
               autoComplete="current-password"
               enterKeyHint="go"
-              placeholder="••••••"
               required
             />
           </div>
@@ -86,14 +94,14 @@ export default function LoginScreen() {
           <button
             type="submit"
             className="btn btn-primary w-full"
-            disabled={busy || !empCode || pin.length !== PIN_LENGTH}
+            disabled={busy || !empCode || !password}
           >
             {busy ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
 
         <p className="text-center text-xs text-ink-600">
-          Forgotten your PIN? Ask a manager to reset it.
+          Forgotten your password? Ask a manager to reset it.
         </p>
       </div>
     </main>

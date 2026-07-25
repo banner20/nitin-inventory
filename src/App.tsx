@@ -9,6 +9,7 @@ import AdminShell from '@/components/AdminShell'
 import LoginScreen from '@/features/auth/LoginScreen'
 import CrewHome from '@/features/crew/CrewHome'
 import Me from '@/features/crew/Me'
+import People from '@/features/admin/People'
 
 function LoginRoute() {
   const { session, profile } = useAuth()
@@ -84,15 +85,7 @@ function Routing() {
                 </Placeholder>
               }
             />
-            <Route
-              path="people"
-              element={
-                <Placeholder title="People" milestone="M1">
-                  Create accounts, reset PINs, deactivate crew, and see each
-                  person’s return record.
-                </Placeholder>
-              }
-            />
+            <Route path="people" element={<People />} />
           </Route>
         </Route>
       </Route>

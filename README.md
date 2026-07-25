@@ -21,22 +21,33 @@ Without credentials the app shows a setup screen rather than a blank page.
 1. Create a free project at [supabase.com](https://supabase.com/dashboard).
 2. Copy `.env.example` to `.env.local` and paste the **Project URL** and the
    **anon public** key from the project's API settings.
-3. Apply the schema and demo data:
+3. Apply the schema:
 
 ```bash
 npx supabase login
 npx supabase link --project-ref <your-project-ref>
-npm run db:seed        # schema + demo data (dev only)
+npm run db:push        # schema only — use this on any real project
 ```
 
-`db:seed` applies the migrations *and* loads `supabase/seed.sql`. For schema
-only — which is what you'd run against anything real — use `npm run db:push`.
+Or paste the files in `supabase/migrations/` into the dashboard's SQL editor,
+in filename order.
 
-Or paste `supabase/migrations/20260725000100_init.sql` and then
-`supabase/seed.sql` into the dashboard's SQL editor, in that order.
+`npm run db:seed` additionally loads `supabase/seed.sql`, which creates six
+demo accounts whose password is `123456`. Fine on a throwaway local database,
+a bad idea anywhere reachable from the internet.
 
-Every seeded login uses PIN **123456** — try `NITIN` (admin), `RAVI` (manager)
-or `AMIT` (crew).
+### Creating the first account
+
+Accounts are admin-created — nobody can sign themselves up. Once the schema is
+applied, create the first admin from the Supabase SQL editor:
+
+```sql
+select create_app_user('NITIN', 'Nitin Kulkarni', 'your-password', 'admin');
+```
+
+After that everything happens in the app under **Admin → People**: add crew,
+assign roles, reset passwords, deactivate people who leave. Passwords are
+bcrypt-hashed on save, so they can be reset but never read back.
 
 ### Database — local via Docker (optional)
 
