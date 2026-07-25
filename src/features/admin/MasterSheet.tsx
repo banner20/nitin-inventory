@@ -2,7 +2,12 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { useAsync } from '@/lib/useAsync'
 import { fetchItemAvailability } from '@/lib/queries'
 import { createItem, fetchCategories, findSimilarItems } from '@/lib/txns'
-import { itemMatches, type ItemAvailability } from '@/lib/types'
+import {
+  formatPacks,
+  formatQty,
+  itemMatches,
+  type ItemAvailability,
+} from '@/lib/types'
 
 type SortKey = 'name' | 'qty_available' | 'qty_out' | 'qty_owned'
 
@@ -137,23 +142,43 @@ function Row({ row }: { row: ItemAvailability }) {
     <tr className="hover:bg-ink-850">
       <td className="p-3">
         <span className="text-white">{row.name}</span>
-        <span className="text-ink-600"> · {row.unit}</span>
+        {row.kind === 'consumable' ? (
+          <span className="ml-2 text-[10px] uppercase tracking-wide text-ink-600">
+            consumable
+          </span>
+        ) : (
+          <span className="ml-2 text-[10px] uppercase tracking-wide text-brand-400/70">
+            returnable
+          </span>
+        )}
+        <span className="block text-xs text-ink-600">
+          {row.pack_label ? `${row.pack_size} ${row.unit} per ${row.pack_label}` : row.unit}
+        </span>
       </td>
-      <td className="p-3 text-right tabular text-ink-400">{row.qty_owned}</td>
-      <td className="p-3 text-right tabular text-ink-400">{row.qty_out || ''}</td>
+      <td className="p-3 text-right tabular text-ink-400">
+        {Number(row.qty_owned) ? formatPacks(row.qty_owned, row) : ''}
+      </td>
+      <td className="p-3 text-right tabular text-ink-400">
+        {Number(row.qty_out) ? formatPacks(row.qty_out, row) : ''}
+      </td>
       <td className="p-3 text-right tabular">
-        {row.qty_quarantined ? (
-          <span className="text-warn-500">{row.qty_quarantined}</span>
+        {Number(row.qty_quarantined) ? (
+          <span className="text-warn-500">{formatPacks(row.qty_quarantined, row)}</span>
         ) : (
           ''
         )}
       </td>
       <td className="p-3 text-right tabular font-semibold">
-        <span className={row.below_min ? 'text-warn-500' : 'text-white'}>
-          {row.qty_available}
+        <span
+          className={row.below_min ? 'text-warn-500' : 'text-white'}
+          title={formatQty(row.qty_available, row)}
+        >
+          {formatQty(row.qty_available, row)}
         </span>
       </td>
-      <td className="p-3 text-right tabular text-ink-600">{row.min_stock || ''}</td>
+      <td className="p-3 text-right tabular text-ink-600">
+        {Number(row.min_stock) ? formatPacks(row.min_stock, row) : ''}
+      </td>
     </tr>
   )
 }

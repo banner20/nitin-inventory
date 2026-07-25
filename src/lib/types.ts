@@ -58,6 +58,56 @@ export interface ItemAvailability {
   aliases: string[]
   sku: string | null
   category_name: string | null
+  kind: ItemKind
+  /** How many base units in one pack: a 750ml bottle of gin is 750. */
+  pack_size: number
+  /** What one pack is called — bottle, crate, bag. Null means loose. */
+  pack_label: string | null
+}
+
+export type ItemKind = 'returnable' | 'consumable'
+
+interface PackInfo {
+  unit: string
+  pack_size: number
+  pack_label: string | null
+}
+
+/**
+ * Stock is held in a base unit so half a bottle can be represented, but nobody
+ * loading a van wants to read "4500 ml". Show packs when the item has them,
+ * and keep the exact figure alongside rather than hiding it — a half bottle of
+ * gin is real money.
+ */
+export function formatQty(qty: number, item: PackInfo): string {
+  const n = Number(qty)
+  const exact = `${trim(n)} ${item.unit}`
+  if (!item.pack_label || item.pack_size <= 1) return exact
+
+  const packs = n / item.pack_size
+  const whole = Math.floor(packs)
+  const remainder = n - whole * item.pack_size
+
+  if (n === 0) return `0 ${plural(item.pack_label, 0)}`
+  if (remainder === 0) return `${trim(packs)} ${plural(item.pack_label, packs)}`
+  if (whole === 0) return exact
+  return `${whole} ${plural(item.pack_label, whole)} + ${trim(remainder)} ${item.unit}`
+}
+
+/** Compact form for dense tables: just the pack count. */
+export function formatPacks(qty: number, item: PackInfo): string {
+  const n = Number(qty)
+  if (!item.pack_label || item.pack_size <= 1) return `${trim(n)} ${item.unit}`
+  return `${trim(n / item.pack_size)} ${plural(item.pack_label, n / item.pack_size)}`
+}
+
+function trim(n: number): string {
+  return Number(n.toFixed(3)).toLocaleString('en-IN')
+}
+
+function plural(label: string, n: number): string {
+  if (Math.abs(n) === 1) return label
+  return label.endsWith('s') ? label : `${label}s`
 }
 
 /** Does this item match what someone typed, by name, alias or SKU? */

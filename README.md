@@ -1,11 +1,30 @@
 # Nitin Inventory
 
-Inventory in/out for an events crew. Phone-first PWA for the people carrying
-gear, desktop admin console for whoever owns the master sheet.
+Stock in/out for a bar events company. Phone-first PWA for the crew loading
+the van, desktop admin console for whoever owns the master sheet.
 
 - **No scanning.** People log in with an employee code and type what they take.
 - **Append-only ledger.** Stock is always derived, never a number someone edits.
 - **Offline-first.** The store room and the venue both have bad signal.
+
+Bar stock isn't AV gear, and the schema reflects that:
+
+- **Fractional quantities.** A bottle is 750 ml and a pour is 30 ml, so a half
+  bottle coming back is representable rather than rounded away.
+- **Packs.** Stock is held in a base unit but entered and shown in bottles,
+  crates and bags — nobody types "4500" at 6am.
+- **Returnable vs consumable.** Glassware is expected back; gin isn't. Not
+  returning a consumable is the normal outcome, not a loss.
+- **Honest outcomes.** A returned line is `ok`, `damaged`, `consumed`,
+  `wasted` or `lost`. All but the first two reduce what you own; they're kept
+  apart because when the stock is liquor, the difference between "we sold it"
+  and "it's unaccounted for" is the whole point.
+- **Recipes** (`recipes`, `recipe_lines`) describe what a drink should use.
+  They're advisory — the ledger never reads them.
+
+Load `supabase/seed_bar_catalog.sql` for a starter catalogue: 78 items across
+spirits, mixers, garnishes, ice, glassware and equipment, plus 10 classic
+recipes. Catalogue only — no accounts, no invented stock.
 
 ## Running it
 

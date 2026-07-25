@@ -3,12 +3,30 @@ import { Link } from 'react-router-dom'
 import { useAsync } from '@/lib/useAsync'
 import { fetchItemAvailability } from '@/lib/queries'
 import { postTxn, type PostLine } from '@/lib/txns'
-import { itemMatches, type ItemAvailability } from '@/lib/types'
+import { formatPacks, itemMatches, type ItemAvailability } from '@/lib/types'
 
 interface DraftRow {
   item: ItemAvailability
-  qty: number
-  unitCost: string
+  /** Entered in packs when the item has them (bottles), else in base units. */
+  amount: string
+  /** Cost of one pack — how invoices are actually written. */
+  packCost: string
+}
+
+/** Packs the person typed -> base units the ledger stores. */
+function toBaseUnits(row: DraftRow): number {
+  const n = Number(row.amount) || 0
+  return usesPacks(row.item) ? n * Number(row.item.pack_size) : n
+}
+
+function usesPacks(item: ItemAvailability): boolean {
+  return Boolean(item.pack_label) && Number(item.pack_size) > 1
+}
+
+function lineTotal(row: DraftRow): number {
+  const cost = Number(row.packCost) || 0
+  const n = Number(row.amount) || 0
+  return cost * n
 }
 
 /**
@@ -39,13 +57,10 @@ export default function StockIn() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q, items.data, rows])
 
-  const totalValue = rows.reduce(
-    (sum, r) => sum + (Number(r.unitCost) || 0) * r.qty,
-    0,
-  )
+  const totalValue = rows.reduce((sum, r) => sum + lineTotal(r), 0)
 
   function add(item: ItemAvailability) {
-    setRows((r) => [...r, { item, qty: 1, unitCost: '' }])
+    setRows((r) => [...r, { item, amount: '1', packCost: '' }])
     setQ('')
   }
 
@@ -61,12 +76,19 @@ export default function StockIn() {
     setBusy(true)
     setError(null)
     try {
-      const lines: PostLine[] = rows.map((r) => ({
-        item_id: r.item.item_id,
-        qty: r.qty,
-        unit_cost: r.unitCost === '' ? null : Number(r.unitCost),
-        vendor: vendor.trim() || null,
-      }))
+      const lines: PostLine[] = rows.map((r) => {
+        const qty = toBaseUnits(r)
+        // Store cost per base unit so line value stays qty * unit_cost no
+        // matter which way it was typed in.
+        const perBase =
+          r.packCost === '' || qty === 0 ? null : lineTotal(r) / qty
+        return {
+          item_id: r.item.item_id,
+          qty,
+          unit_cost: perBase,
+          vendor: vendor.trim() || null,
+        }
+      })
       await postTxn({ type: 'ADD', lines, note })
       setDone({ count: rows.length, total: totalValue })
       setRows([])
@@ -151,7 +173,7 @@ export default function StockIn() {
                   >
                     <span className="text-ink-200">{m.name}</span>
                     <span className="text-xs text-ink-600 shrink-0">
-                      {m.qty_owned} owned
+                      {formatPacks(m.qty_owned, m)} owned
                     </span>
                   </button>
                 </li>
@@ -167,9 +189,9 @@ export default function StockIn() {
             <thead className="text-left text-ink-400 border-b border-ink-800">
               <tr>
                 <th className="p-3 font-medium">Item</th>
-                <th className="p-3 font-medium w-28">Quantity</th>
+                <th className="p-3 font-medium w-40">How many</th>
                 <th className="p-3 font-medium w-36">Cost each (₹)</th>
-                <th className="p-3 font-medium text-right w-28">Line total</th>
+                <th className="p-3 font-medium text-right w-32">Line total</th>
                 <th className="w-12" />
               </tr>
             </thead>
@@ -178,18 +200,31 @@ export default function StockIn() {
                 <tr key={r.item.item_id}>
                   <td className="p-3">
                     <span className="text-white">{r.item.name}</span>
-                    <span className="text-ink-600"> · {r.item.unit}</span>
+                    <span className="block text-xs text-ink-600">
+                      {usesPacks(r.item)
+                        ? `${r.item.pack_size} ${r.item.unit} per ${r.item.pack_label}`
+                        : r.item.unit}
+                    </span>
                   </td>
                   <td className="p-2">
-                    <input
-                      className="input tabular h-10 min-h-10"
-                      type="number"
-                      min={1}
-                      value={r.qty}
-                      onChange={(e) =>
-                        update(r.item.item_id, { qty: Math.max(1, Number(e.target.value) || 1) })
-                      }
-                    />
+                    <div className="flex items-center gap-2">
+                      <input
+                        className="input tabular h-10 min-h-10 w-20"
+                        type="number"
+                        min={0}
+                        step="any"
+                        value={r.amount}
+                        onChange={(e) => update(r.item.item_id, { amount: e.target.value })}
+                      />
+                      <span className="text-xs text-ink-400 whitespace-nowrap">
+                        {usesPacks(r.item) ? `${r.item.pack_label}s` : r.item.unit}
+                      </span>
+                    </div>
+                    {usesPacks(r.item) && Number(r.amount) > 0 && (
+                      <span className="block text-xs text-ink-600 mt-1 tabular">
+                        = {toBaseUnits(r).toLocaleString('en-IN')} {r.item.unit}
+                      </span>
+                    )}
                   </td>
                   <td className="p-2">
                     <input
@@ -197,15 +232,13 @@ export default function StockIn() {
                       type="number"
                       min={0}
                       step="0.01"
-                      value={r.unitCost}
-                      onChange={(e) => update(r.item.item_id, { unitCost: e.target.value })}
-                      placeholder="—"
+                      value={r.packCost}
+                      onChange={(e) => update(r.item.item_id, { packCost: e.target.value })}
+                      placeholder={usesPacks(r.item) ? `per ${r.item.pack_label}` : '—'}
                     />
                   </td>
                   <td className="p-3 text-right tabular text-ink-400">
-                    {r.unitCost
-                      ? `₹${((Number(r.unitCost) || 0) * r.qty).toLocaleString('en-IN')}`
-                      : '—'}
+                    {r.packCost ? `₹${lineTotal(r).toLocaleString('en-IN')}` : '—'}
                   </td>
                   <td className="p-2 text-right">
                     <button
