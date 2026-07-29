@@ -3,7 +3,6 @@ import { AuthProvider, useAuth } from '@/features/auth/AuthProvider'
 import { RequireAuth, RequireManager } from '@/components/guards'
 import { supabaseConfigured } from '@/lib/supabase'
 import SetupScreen from '@/components/SetupScreen'
-import Placeholder from '@/components/Placeholder'
 import CrewShell from '@/components/CrewShell'
 import AdminShell from '@/components/AdminShell'
 import LoginScreen from '@/features/auth/LoginScreen'
@@ -15,6 +14,7 @@ import Events from '@/features/admin/Events'
 import People from '@/features/admin/People'
 import MasterSheet from '@/features/admin/MasterSheet'
 import StockIn from '@/features/admin/StockIn'
+import ConflictQueue from '@/features/admin/ConflictQueue'
 
 function LoginRoute() {
   const { session, profile } = useAuth()
@@ -41,23 +41,7 @@ function Routing() {
           <Route path="admin" element={<AdminShell />}>
             <Route index element={<MasterSheet />} />
             <Route path="stock-in" element={<StockIn />} />
-            <Route
-              path="search"
-              element={
-                <Placeholder title="Universal search" milestone="M1">
-                  One box across items, people, events, kits and transactions.
-                </Placeholder>
-              }
-            />
-            <Route
-              path="conflicts"
-              element={
-                <Placeholder title="Conflict queue" milestone="M4">
-                  Duplicate merges, impossible stock, overdue aging, quarantine
-                  decisions and availability collisions.
-                </Placeholder>
-              }
-            />
+            <Route path="conflicts" element={<ConflictQueue />} />
             <Route path="events" element={<Events />} />
             <Route path="people" element={<People />} />
           </Route>

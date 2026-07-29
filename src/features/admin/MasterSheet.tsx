@@ -8,6 +8,7 @@ import {
   itemMatches,
   type ItemAvailability,
 } from '@/lib/types'
+import ImportItems from './ImportItems'
 
 type SortKey = 'name' | 'qty_available' | 'qty_out' | 'qty_owned'
 
@@ -17,20 +18,21 @@ export default function MasterSheet() {
   const [q, setQ] = useState('')
   const [categoryId, setCategoryId] = useState<string>('')
   const [onlyLow, setOnlyLow] = useState(false)
-  const [onlyImpossible, setOnlyImpossible] = useState(false)
+  const [onlyMismatch, setOnlyMismatch] = useState(false)
   const [sort, setSort] = useState<SortKey>('name')
   const [adding, setAdding] = useState(false)
+  const [importing, setImporting] = useState(false)
 
   const rows = useMemo(() => {
     let list = items.data ?? []
     if (q.trim()) list = list.filter((i) => itemMatches(i, q))
     if (categoryId) list = list.filter((i) => i.category_id === categoryId)
     if (onlyLow) list = list.filter((i) => i.below_min)
-    if (onlyImpossible) list = list.filter((i) => Number(i.qty_available) < 0)
+    if (onlyMismatch) list = list.filter((i) => Number(i.qty_available) < 0)
     return [...list].sort((a, b) =>
       sort === 'name' ? a.name.localeCompare(b.name) : Number(b[sort]) - Number(a[sort]),
     )
-  }, [items.data, q, categoryId, onlyLow, onlyImpossible, sort])
+  }, [items.data, q, categoryId, onlyLow, onlyMismatch, sort])
 
   const totals = useMemo(() => {
     const list = items.data ?? []
@@ -38,10 +40,10 @@ export default function MasterSheet() {
       items: list.length,
       out: list.filter((i) => Number(i.qty_out) > 0).length,
       low: list.filter((i) => i.below_min).length,
-      // Available below zero means the books disagree with reality — either
-      // stock went out that was never booked in, or something was counted
-      // twice. Either way a human has to look.
-      impossible: list.filter((i) => Number(i.qty_available) < 0).length,
+      // Available below zero means more has gone out than was ever recorded
+      // coming in — the books don't add up and a human has to look. Fixed
+      // in the conflict queue, or by adding the missing stock-in here.
+      mismatch: list.filter((i) => Number(i.qty_available) < 0).length,
     }
   }, [items.data])
 
@@ -55,15 +57,35 @@ export default function MasterSheet() {
             {totals.low > 0 && (
               <span className="text-warn-500"> · {totals.low} below minimum</span>
             )}
-            {totals.impossible > 0 && (
-              <span className="text-bad-500"> · {totals.impossible} impossible</span>
+            {totals.mismatch > 0 && (
+              <span className="text-bad-500">
+                {' '}
+                · {totals.mismatch} don't add up
+              </span>
             )}
           </p>
         </div>
-        <button className="btn btn-primary" onClick={() => setAdding((a) => !a)}>
-          {adding ? 'Cancel' : 'Add item'}
-        </button>
+        <div className="flex gap-2">
+          <button className="btn btn-ghost" onClick={() => setImporting((i) => !i)}>
+            {importing ? 'Cancel' : 'Import'}
+          </button>
+          <button className="btn btn-primary" onClick={() => setAdding((a) => !a)}>
+            {adding ? 'Cancel' : 'Add item'}
+          </button>
+        </div>
       </header>
+
+      {importing && (
+        <ImportItems
+          categories={cats.data ?? []}
+          existingItems={items.data ?? []}
+          onImported={() => {
+            items.reload()
+            cats.reload()
+          }}
+          onClose={() => setImporting(false)}
+        />
+      )}
 
       {adding && (
         <NewItemForm
@@ -108,14 +130,14 @@ export default function MasterSheet() {
           <input type="checkbox" checked={onlyLow} onChange={(e) => setOnlyLow(e.target.checked)} />
           Below minimum
         </label>
-        {totals.impossible > 0 && (
+        {totals.mismatch > 0 && (
           <label className="flex items-center gap-2 px-3 text-sm text-bad-500">
             <input
               type="checkbox"
-              checked={onlyImpossible}
-              onChange={(e) => setOnlyImpossible(e.target.checked)}
+              checked={onlyMismatch}
+              onChange={(e) => setOnlyMismatch(e.target.checked)}
             />
-            Impossible stock
+            Doesn't add up
           </label>
         )}
       </div>
@@ -198,12 +220,17 @@ function Row({ row }: { row: ItemAvailability }) {
           }
           title={
             Number(row.qty_available) < 0
-              ? 'More has gone out than was ever booked in — the books disagree with reality.'
+              ? "Doesn't add up: more has gone out than was ever recorded as bought or received. Fix it under Conflicts, or add the missing stock-in here."
               : formatQty(row.qty_available, row)
           }
         >
           {formatQty(row.qty_available, row)}
         </span>
+        {Number(row.qty_available) < 0 && (
+          <span className="block text-[10px] uppercase tracking-wide text-bad-500/80">
+            doesn't add up
+          </span>
+        )}
       </td>
       <td className="p-3 text-right tabular text-ink-600">
         {Number(row.min_stock) ? formatPacks(row.min_stock, row) : ''}

@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useAsync } from '@/lib/useAsync'
 import { fetchItemAvailability } from '@/lib/queries'
 import { postTxn, type PostLine } from '@/lib/txns'
@@ -39,6 +39,7 @@ function lineTotal(row: DraftRow): number {
  */
 export default function StockIn() {
   const items = useAsync(fetchItemAvailability, [])
+  const [searchParams, setSearchParams] = useSearchParams()
   const [q, setQ] = useState('')
   const [rows, setRows] = useState<DraftRow[]>([])
   const [vendor, setVendor] = useState('')
@@ -48,6 +49,20 @@ export default function StockIn() {
   const [error, setError] = useState<string | null>(null)
 
   const chosen = new Set(rows.map((r) => r.item.item_id))
+
+  // Arriving from the conflict queue with "this item needs stock" pre-adds
+  // it, so fixing a mismatch is one screen instead of a search-and-find.
+  useEffect(() => {
+    const wanted = searchParams.get('item')
+    if (!wanted || !items.data) return
+    const found = items.data.find((i) => i.item_id === wanted)
+    if (found) setRows((r) => (chosen.has(wanted) ? r : [...r, { item: found, amount: '1', packCost: '' }]))
+    setSearchParams((p) => {
+      p.delete('item')
+      return p
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items.data])
 
   const matches = useMemo(() => {
     if (!q.trim()) return []

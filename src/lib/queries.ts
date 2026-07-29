@@ -28,6 +28,18 @@ export async function fetchAllOpenBalances(): Promise<OpenBalance[]> {
   return (data ?? []) as OpenBalance[]
 }
 
+/** Stock still out past its event's end date — the conflict queue's aging list. */
+export async function fetchOverdueBalances(): Promise<OpenBalance[]> {
+  const { data, error } = await supabase
+    .from('v_open_balances')
+    .select('*')
+    .eq('overdue', true)
+    .order('ends_at', { ascending: true })
+
+  if (error) throw error
+  return (data ?? []) as OpenBalance[]
+}
+
 export async function fetchItemAvailability(): Promise<ItemAvailability[]> {
   const { data, error } = await supabase
     .from('v_item_availability')
