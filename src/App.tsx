@@ -15,6 +15,7 @@ import People from '@/features/admin/People'
 import MasterSheet from '@/features/admin/MasterSheet'
 import StockIn from '@/features/admin/StockIn'
 import ConflictQueue from '@/features/admin/ConflictQueue'
+import History from '@/features/admin/History'
 
 function LoginRoute() {
   const { session, profile } = useAuth()
@@ -43,6 +44,7 @@ function Routing() {
             <Route path="stock-in" element={<StockIn />} />
             <Route path="conflicts" element={<ConflictQueue />} />
             <Route path="events" element={<Events />} />
+            <Route path="history" element={<History />} />
             <Route path="people" element={<People />} />
           </Route>
         </Route>

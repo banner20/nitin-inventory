@@ -68,7 +68,14 @@ export interface NewItemInput {
   sku?: string | null
   minStock: number
   aliases: string[]
+  kind: ItemKind
+  /** How many base units in one pack. Omit or 1 for a loose (unpacked) item. */
+  packSize?: number
+  packLabel?: string | null
 }
+
+const ITEM_COLUMNS =
+  'id, name, category_id, unit, sku, min_stock, aliases, photo_url, notes, active, kind, pack_size, pack_label'
 
 export async function createItem(input: NewItemInput): Promise<Item> {
   const { data, error } = await supabase
@@ -80,8 +87,11 @@ export async function createItem(input: NewItemInput): Promise<Item> {
       sku: input.sku?.trim() || null,
       min_stock: input.minStock,
       aliases: input.aliases,
+      kind: input.kind,
+      pack_size: input.packSize && input.packSize > 0 ? input.packSize : 1,
+      pack_label: input.packLabel?.trim() || null,
     })
-    .select('id, name, category_id, unit, sku, min_stock, aliases, photo_url, notes, active')
+    .select(ITEM_COLUMNS)
     .single()
 
   if (error) {
@@ -101,6 +111,9 @@ export async function updateItem(id: string, patch: Partial<NewItemInput>): Prom
   if (patch.sku !== undefined) body.sku = patch.sku?.trim() || null
   if (patch.minStock !== undefined) body.min_stock = patch.minStock
   if (patch.aliases !== undefined) body.aliases = patch.aliases
+  if (patch.kind !== undefined) body.kind = patch.kind
+  if (patch.packSize !== undefined) body.pack_size = patch.packSize > 0 ? patch.packSize : 1
+  if (patch.packLabel !== undefined) body.pack_label = patch.packLabel?.trim() || null
 
   const { error } = await supabase.from('items').update(body).eq('id', id)
   if (error) throw new Error(error.message)

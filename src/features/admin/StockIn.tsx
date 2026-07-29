@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAsync } from '@/lib/useAsync'
 import { fetchItemAvailability } from '@/lib/queries'
-import { postTxn, type PostLine } from '@/lib/txns'
-import { formatPacks, itemMatches, type ItemAvailability } from '@/lib/types'
+import { fetchCategories, postTxn, type PostLine } from '@/lib/txns'
+import { formatPacks, itemMatches, toItemAvailability, type ItemAvailability } from '@/lib/types'
+import ItemForm from './ItemForm'
 
 interface DraftRow {
   item: ItemAvailability
@@ -39,6 +40,7 @@ function lineTotal(row: DraftRow): number {
  */
 export default function StockIn() {
   const items = useAsync(fetchItemAvailability, [])
+  const cats = useAsync(fetchCategories, [])
   const [searchParams, setSearchParams] = useSearchParams()
   const [q, setQ] = useState('')
   const [rows, setRows] = useState<DraftRow[]>([])
@@ -47,6 +49,9 @@ export default function StockIn() {
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState<{ count: number; total: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Set once someone chooses "create it" for a name nothing matched — shows
+  // the add-item panel right here instead of sending them away to do it.
+  const [creatingName, setCreatingName] = useState<string | null>(null)
 
   const chosen = new Set(rows.map((r) => r.item.item_id))
 
@@ -77,6 +82,16 @@ export default function StockIn() {
   function add(item: ItemAvailability) {
     setRows((r) => [...r, { item, amount: '1', packCost: '' }])
     setQ('')
+  }
+
+  /** A brand-new item created straight from Stock In drops right into the
+   * basket — no separate trip to the master sheet to add it first. */
+  function onItemCreated(item: Parameters<typeof toItemAvailability>[0]) {
+    const withStock = toItemAvailability(item, cats.data ?? [])
+    setRows((r) => [...r, { item: withStock, amount: '1', packCost: '' }])
+    setCreatingName(null)
+    setQ('')
+    items.reload()
   }
 
   function update(id: string, patch: Partial<DraftRow>) {
@@ -169,13 +184,16 @@ export default function StockIn() {
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search the master sheet…"
           />
-          {q && matches.length === 0 && (
+          {q.trim() && matches.length === 0 && !creatingName && (
             <p className="text-sm text-ink-400">
-              Nothing matches.{' '}
-              <Link to="/admin" className="text-brand-400 underline">
-                Add it to the master sheet
-              </Link>{' '}
-              first.
+              Nothing matches “{q.trim()}”.{' '}
+              <button
+                type="button"
+                className="text-brand-400 underline"
+                onClick={() => setCreatingName(q.trim())}
+              >
+                Add it as a new item
+              </button>
             </p>
           )}
           {matches.length > 0 && (
@@ -196,6 +214,16 @@ export default function StockIn() {
             </ul>
           )}
         </div>
+
+        {creatingName && (
+          <ItemForm
+            categories={cats.data ?? []}
+            initialName={creatingName}
+            submitLabel="Add and load"
+            onCreated={onItemCreated}
+            onCancel={() => setCreatingName(null)}
+          />
+        )}
       </div>
 
       {rows.length > 0 && (

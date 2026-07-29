@@ -5,6 +5,7 @@ import {
   IconAlert,
   IconBox,
   IconCalendar,
+  IconClock,
   IconIn,
   IconLogout,
   IconUsers,
@@ -15,6 +16,7 @@ const nav = [
   { to: '/admin/stock-in', label: 'Stock in', Icon: IconIn, end: false },
   { to: '/admin/conflicts', label: 'Conflicts', Icon: IconAlert, end: false },
   { to: '/admin/events', label: 'Events', Icon: IconCalendar, end: false },
+  { to: '/admin/history', label: 'History', Icon: IconClock, end: false },
   { to: '/admin/people', label: 'People', Icon: IconUsers, end: false },
 ]
 

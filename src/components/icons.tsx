@@ -91,6 +91,13 @@ export const IconUsers = (p: IconProps) => (
   </Base>
 )
 
+export const IconClock = (p: IconProps) => (
+  <Base {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v5l3.5 2" />
+  </Base>
+)
+
 export const IconLogout = (p: IconProps) => (
   <Base {...p}>
     <path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3" />

@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { ItemAvailability, OpenBalance, Profile } from './types'
+import type { ItemAvailability, OpenBalance, Profile, TxnHistoryEntry, TxnType } from './types'
 
 /**
  * Every read goes through here so the rest of the app never writes a raw
@@ -49,6 +49,29 @@ export async function fetchItemAvailability(): Promise<ItemAvailability[]> {
 
   if (error) throw error
   return (data ?? []) as ItemAvailability[]
+}
+
+/**
+ * Every stock action with who did it, newest first. Paged rather than
+ * loaded in full — a busy bar generates a transaction every few minutes
+ * during service, and this history only grows.
+ */
+export async function fetchTxnHistory(
+  offset: number,
+  limit: number,
+  type?: TxnType,
+): Promise<TxnHistoryEntry[]> {
+  let query = supabase
+    .from('v_txn_history')
+    .select('*')
+    .order('occurred_at', { ascending: false })
+    .range(offset, offset + limit - 1)
+
+  if (type) query = query.eq('type', type)
+
+  const { data, error } = await query
+  if (error) throw error
+  return (data ?? []) as TxnHistoryEntry[]
 }
 
 export async function fetchProfiles(): Promise<Profile[]> {

@@ -1,0 +1,232 @@
+import { useState, type FormEvent } from 'react'
+import { createItem, findSimilarItems } from '@/lib/txns'
+import type { Category, Item, ItemKind } from '@/lib/types'
+
+/**
+ * Add-an-item, factored out so it behaves identically wherever it appears —
+ * the master sheet's own "Add item" button, and Stock In's "this doesn't
+ * exist yet" path. One form, one set of rules, one place to fix a bug.
+ */
+export default function ItemForm({
+  categories,
+  initialName = '',
+  submitLabel = 'Add item',
+  onCreated,
+  onCancel,
+}: {
+  categories: Category[]
+  initialName?: string
+  submitLabel?: string
+  onCreated: (item: Item) => void
+  onCancel?: () => void
+}) {
+  const [name, setName] = useState(initialName)
+  const [categoryId, setCategoryId] = useState('')
+  const [kind, setKind] = useState<ItemKind>('consumable')
+  const [unit, setUnit] = useState('ml')
+  const [packSize, setPackSize] = useState('')
+  const [packLabel, setPackLabel] = useState('')
+  const [sku, setSku] = useState('')
+  const [minStock, setMinStock] = useState('0')
+  const [aliases, setAliases] = useState('')
+  const [similar, setSimilar] = useState<{ id: string; name: string }[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  async function checkDuplicates(value: string) {
+    setName(value)
+    setSimilar(await findSimilarItems(value))
+  }
+
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault()
+    setBusy(true)
+    setError(null)
+    try {
+      const item = await createItem({
+        name,
+        categoryId: categoryId || null,
+        unit,
+        sku,
+        minStock: Number(minStock) || 0,
+        kind,
+        packSize: packSize ? Number(packSize) : undefined,
+        packLabel: packLabel || null,
+        aliases: aliases
+          .split(',')
+          .map((a) => a.trim())
+          .filter(Boolean),
+      })
+      onCreated(item)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not add the item.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="card p-4 space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <label className="space-y-1.5 lg:col-span-2">
+          <span className="text-sm text-ink-400">Name</span>
+          <input
+            className="input"
+            value={name}
+            onChange={(e) => void checkDuplicates(e.target.value)}
+            placeholder="LED PAR 64"
+            autoFocus={!initialName}
+            required
+          />
+        </label>
+
+        <label className="space-y-1.5">
+          <span className="text-sm text-ink-400">Category</span>
+          <select
+            className="input"
+            value={categoryId}
+            onChange={(e) => setCategoryId(e.target.value)}
+          >
+            <option value="">Uncategorised</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <fieldset className="space-y-1.5 sm:col-span-2 lg:col-span-3">
+          <legend className="text-sm text-ink-400">What kind of thing is it?</legend>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setKind('consumable')}
+              className={
+                'p-2.5 rounded-lg border text-left transition-colors ' +
+                (kind === 'consumable'
+                  ? 'border-brand-500 bg-ink-850'
+                  : 'border-ink-700 hover:border-ink-600')
+              }
+            >
+              <span className="block text-sm font-medium text-white">Consumable</span>
+              <span className="block text-xs text-ink-400">
+                Spirits, mixers, garnishes, ice — used up, not returned
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setKind('returnable')}
+              className={
+                'p-2.5 rounded-lg border text-left transition-colors ' +
+                (kind === 'returnable'
+                  ? 'border-brand-500 bg-ink-850'
+                  : 'border-ink-700 hover:border-ink-600')
+              }
+            >
+              <span className="block text-sm font-medium text-white">Returnable</span>
+              <span className="block text-xs text-ink-400">
+                Glassware, tools, equipment — expected back
+              </span>
+            </button>
+          </div>
+        </fieldset>
+
+        <label className="space-y-1.5">
+          <span className="text-sm text-ink-400">Unit</span>
+          <input
+            className="input"
+            value={unit}
+            onChange={(e) => setUnit(e.target.value)}
+            placeholder="ml, pcs, g, kg…"
+          />
+        </label>
+
+        <label className="space-y-1.5">
+          <span className="text-sm text-ink-400">Pack size (optional)</span>
+          <input
+            className="input tabular"
+            type="number"
+            min={0}
+            step="any"
+            value={packSize}
+            onChange={(e) => setPackSize(e.target.value)}
+            placeholder="750"
+          />
+        </label>
+
+        <label className="space-y-1.5">
+          <span className="text-sm text-ink-400">Pack name (optional)</span>
+          <input
+            className="input"
+            value={packLabel}
+            onChange={(e) => setPackLabel(e.target.value)}
+            placeholder="bottle, crate, bag…"
+          />
+        </label>
+
+        {(packSize || packLabel) && (
+          <p className="text-xs text-ink-600 sm:col-span-2 lg:col-span-3 -mt-2">
+            One {packLabel || 'pack'} = {packSize || '?'} {unit}. Leave both blank if it's just
+            counted loose, one at a time.
+          </p>
+        )}
+
+        <label className="space-y-1.5">
+          <span className="text-sm text-ink-400">SKU (optional)</span>
+          <input className="input" value={sku} onChange={(e) => setSku(e.target.value)} />
+        </label>
+
+        <label className="space-y-1.5">
+          <span className="text-sm text-ink-400">Minimum stock</span>
+          <input
+            className="input tabular"
+            type="number"
+            min={0}
+            step="any"
+            value={minStock}
+            onChange={(e) => setMinStock(e.target.value)}
+          />
+        </label>
+
+        <label className="space-y-1.5 sm:col-span-2 lg:col-span-3">
+          <span className="text-sm text-ink-400">
+            Other names people call it, comma separated
+          </span>
+          <input
+            className="input"
+            value={aliases}
+            onChange={(e) => setAliases(e.target.value)}
+            placeholder="par can, par64, led par"
+          />
+        </label>
+      </div>
+
+      {similar.length > 0 && (
+        <div className="rounded-lg border border-warn-500/40 bg-warn-500/10 p-3 text-sm">
+          <p className="text-warn-500 font-medium">
+            You may already have this — check before adding a duplicate:
+          </p>
+          <ul className="text-ink-200 mt-1">
+            {similar.map((s) => (
+              <li key={s.id}>· {s.name}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {error && <p className="text-sm text-bad-500">{error}</p>}
+
+      <div className="flex gap-2">
+        <button type="submit" className="btn btn-primary" disabled={busy || !name.trim()}>
+          {busy ? 'Adding…' : submitLabel}
+        </button>
+        {onCancel && (
+          <button type="button" className="btn btn-ghost" onClick={onCancel} disabled={busy}>
+            Cancel
+          </button>
+        )}
+      </div>
+    </form>
+  )
+}

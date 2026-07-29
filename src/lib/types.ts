@@ -44,6 +44,11 @@ export interface Item {
   photo_url: string | null
   notes: string | null
   active: boolean
+  kind: ItemKind
+  /** How many base units in one pack: a 750ml bottle of gin is 750. */
+  pack_size: number
+  /** What one pack is called — bottle, crate, bag. Null means loose. */
+  pack_label: string | null
 }
 
 /** An item plus its derived stock position. Never stored — always computed. */
@@ -71,6 +76,35 @@ export interface ItemAvailability {
 }
 
 export type ItemKind = 'returnable' | 'consumable'
+
+/**
+ * A freshly created item has no history yet, so every derived figure is
+ * known without a query: nothing has been bought, taken out, or quarantined.
+ * Used so a brand-new item can drop straight into a basket instead of
+ * waiting on a round trip to re-fetch the view it would trivially match.
+ */
+export function toItemAvailability(item: Item, categories: Category[]): ItemAvailability {
+  const category = categories.find((c) => c.id === item.category_id)
+  return {
+    item_id: item.id,
+    name: item.name,
+    category_id: item.category_id,
+    unit: item.unit,
+    min_stock: item.min_stock,
+    active: item.active,
+    qty_owned: 0,
+    qty_out: 0,
+    qty_quarantined: 0,
+    qty_available: 0,
+    below_min: item.min_stock > 0,
+    aliases: item.aliases,
+    sku: item.sku,
+    category_name: category?.name ?? null,
+    kind: item.kind,
+    pack_size: item.pack_size,
+    pack_label: item.pack_label,
+  }
+}
 
 interface PackInfo {
   unit: string
@@ -217,4 +251,35 @@ export interface DraftLine {
   qty: number
   condition?: LineCondition
   note?: string
+}
+
+/** One line within a history entry — enough pack info to format it the same
+ * way as everywhere else in the app. */
+export interface TxnHistoryLine {
+  item_name: string
+  unit: string
+  qty: number
+  condition: LineCondition | null
+  from_quarantine: boolean
+  unit_cost: number | null
+  vendor: string | null
+  pack_size: number
+  pack_label: string | null
+}
+
+/** One row per transaction — who did it, for what, and what it contained. */
+export interface TxnHistoryEntry {
+  txn_id: string
+  type: TxnType
+  status: TxnStatus
+  source: TxnSource
+  note: string | null
+  occurred_at: string
+  created_at: string
+  event_name: string | null
+  actor_name: string | null
+  actor_emp_code: string | null
+  person_name: string | null
+  person_emp_code: string | null
+  lines: TxnHistoryLine[] | null
 }
