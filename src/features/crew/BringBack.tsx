@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import clsx from 'clsx'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { useAsync } from '@/lib/useAsync'
 import { fetchMyOpenBalances } from '@/lib/queries'
@@ -12,19 +13,29 @@ import {
 } from '@/components/AmountInput'
 import { formatPacks, type LineCondition, type OpenBalance } from '@/lib/types'
 
-/** Reasons stock didn't come back, in the order a bar actually uses them. */
-const REASONS: { value: LineCondition; label: string; hint: string }[] = [
-  { value: 'consumed', label: 'Served', hint: 'Poured and sold — normal' },
-  { value: 'wasted', label: 'Spilled / spoiled', hint: 'A cost worth watching' },
-  { value: 'damaged', label: 'Damaged', hint: 'Came back broken' },
-  { value: 'lost', label: 'Missing', hint: 'Unaccounted for' },
+/** Why stock didn't come back. Only ever seen by someone logging a problem. */
+const ISSUES: { value: LineCondition; label: string }[] = [
+  { value: 'consumed', label: 'Served' },
+  { value: 'wasted', label: 'Spilled' },
+  { value: 'damaged', label: 'Broken' },
+  { value: 'lost', label: 'Missing' },
 ]
+
+const ISSUE_LABEL: Record<LineCondition, string> = {
+  ok: 'returned',
+  consumed: 'served',
+  wasted: 'spilled',
+  damaged: 'broken',
+  lost: 'missing',
+}
 
 interface Row {
   bal: OpenBalance
   back: string
   mode: AmountMode
   reason: LineCondition
+  /** Whether this line's reason picker has been opened. */
+  issueOpen: boolean
 }
 
 function toBase(row: Row): number {
@@ -35,11 +46,17 @@ function packsOut(b: OpenBalance): number {
   return usesPacks(b) ? Number(b.outstanding) / Number(b.pack_size) : Number(b.outstanding)
 }
 
+/** The reason that needs no explanation, given what the thing is. */
+function defaultReason(b: OpenBalance): LineCondition {
+  return b.kind === 'returnable' ? 'lost' : 'consumed'
+}
+
 /**
  * The return screen opens pre-filled with exactly what went out, so the common
- * case is confirming rather than typing. Whatever doesn't come back has to be
- * explained — and for a bar the default explanation depends on what it is:
- * gin was almost certainly served, a jigger almost certainly wasn't.
+ * case is confirming rather than typing. Nothing here is compulsory: gin that
+ * doesn't come back was served, glassware that does is simply back. Logging a
+ * problem is one tap away for the nights when there is one, and out of the way
+ * on the nights when there isn't.
  */
 export default function BringBack() {
   const { profile } = useAuth()
@@ -65,20 +82,29 @@ export default function BringBack() {
     return map
   }, [balances.data])
 
-  // Pre-fill: returnables default to everything coming back, consumables to
-  // nothing, because that is what usually happened.
+  // Returnables default to everything coming back, consumables to nothing,
+  // because that is what usually happened.
   useEffect(() => {
     if (!eventId) return
-    const lines = byEvent.get(eventId) ?? []
     setRows(
-      lines.map((bal) => ({
+      (byEvent.get(eventId) ?? []).map((bal) => ({
         bal,
         back: bal.kind === 'returnable' ? String(Number(packsOut(bal).toFixed(3))) : '0',
         mode: usesPacks(bal) ? 'pack' : 'base',
-        reason: bal.kind === 'returnable' ? 'lost' : 'consumed',
+        reason: defaultReason(bal),
+        issueOpen: false,
       })),
     )
   }, [eventId, byEvent])
+
+  function patch(idx: number, next: Partial<Row>) {
+    setRows((rs) => rs.map((r, i) => (i === idx ? { ...r, ...next } : r)))
+  }
+
+  const issueCount = rows.filter(
+    (r) => Number(r.bal.outstanding) - Math.min(toBase(r), Number(r.bal.outstanding)) > 0
+      && r.reason !== 'consumed',
+  ).length
 
   async function post() {
     if (!eventId || !profile) return
@@ -94,12 +120,7 @@ export default function BringBack() {
       }
       if (lines.length === 0) throw new Error('Nothing to record.')
 
-      await postTxn({
-        type: 'IN',
-        lines,
-        eventId,
-        personId: profile.id,
-      })
+      await postTxn({ type: 'IN', lines, eventId, personId: profile.id })
       navigate('/', { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save.')
@@ -154,7 +175,7 @@ export default function BringBack() {
   const eventName = rows[0]?.bal.event_name ?? ''
 
   return (
-    <div className="space-y-4 pb-28">
+    <div className="space-y-3 pb-32">
       <header className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs text-ink-400">Returning from</p>
@@ -183,65 +204,105 @@ export default function BringBack() {
         Everything came back
       </button>
 
-      <ul className="card divide-y divide-ink-800">
+      <ul className="space-y-3">
         {rows.map((row, idx) => {
           const out = Number(row.bal.outstanding)
           const back = Math.min(toBase(row), out)
           const gap = out - back
           const over = toBase(row) > out
+          const flagged = gap > 0 && row.reason !== 'consumed'
+
           return (
-            <li key={row.bal.item_id} className="p-3 space-y-2">
+            <li
+              key={row.bal.item_id}
+              className={clsx(
+                'card p-4 space-y-3',
+                flagged && 'border-warn-500/50',
+              )}
+            >
               <div className="flex items-baseline justify-between gap-3">
-                <p className="text-white truncate">{row.bal.item_name}</p>
-                <p className="text-xs text-ink-400 shrink-0">
-                  {formatPacks(out, row.bal)} out
-                </p>
+                <p className="text-white font-medium truncate">{row.bal.item_name}</p>
+                <p className="text-xs text-ink-400 shrink-0">{formatPacks(out, row.bal)} out</p>
+              </div>
+
+              {/* Two taps cover the overwhelming majority of lines. */}
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  className={clsx(
+                    'btn',
+                    back === out && !over ? 'btn-primary' : 'btn-ghost',
+                  )}
+                  onClick={() =>
+                    patch(idx, {
+                      mode: usesPacks(row.bal) ? 'pack' : 'base',
+                      back: String(Number(packsOut(row.bal).toFixed(3))),
+                    })
+                  }
+                >
+                  All back
+                </button>
+                <button
+                  className={clsx('btn', back === 0 ? 'btn-primary' : 'btn-ghost')}
+                  onClick={() => patch(idx, { back: '0' })}
+                >
+                  {row.bal.kind === 'returnable' ? 'None back' : 'All used'}
+                </button>
               </div>
 
               <div className="space-y-1">
-                <span className="text-sm text-ink-400">Coming back</span>
+                <span className="text-xs text-ink-400">Or enter the amount</span>
                 <AmountInput
                   item={row.bal}
                   amount={row.back}
                   mode={row.mode}
                   ariaLabel={`Amount of ${row.bal.item_name} coming back`}
-                  onChange={(back, mode) =>
-                    setRows((rs) => rs.map((r, i) => (i === idx ? { ...r, back, mode } : r)))
-                  }
+                  onChange={(back, mode) => patch(idx, { back, mode })}
                 />
               </div>
 
               {over && (
                 <p className="text-xs text-warn-500">
-                  That's more than went out — capped at {formatPacks(out, row.bal)}.
+                  More than went out — capped at {formatPacks(out, row.bal)}.
                 </p>
               )}
 
-              {gap > 0 && (
-                <div className="space-y-1.5 pt-1">
-                  <p className="text-xs text-ink-400">
-                    {formatPacks(gap, row.bal)} not coming back —
-                  </p>
-                  <select
-                    className="input h-10 min-h-10 text-sm"
-                    value={row.reason}
-                    onChange={(e) =>
-                      setRows((rs) =>
-                        rs.map((r, i) =>
-                          i === idx ? { ...r, reason: e.target.value as LineCondition } : r,
-                        ),
-                      )
-                    }
-                    aria-label={`Why ${row.bal.item_name} is not coming back`}
-                  >
-                    {REASONS.map((r) => (
-                      <option key={r.value} value={r.value}>
-                        {r.label} — {r.hint}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+              {gap > 0 &&
+                (row.issueOpen ? (
+                  <div className="space-y-2">
+                    <p className="text-xs text-ink-400">
+                      {formatPacks(gap, row.bal)} didn’t come back — what happened?
+                    </p>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {ISSUES.map((o) => (
+                        <button
+                          key={o.value}
+                          className={clsx(
+                            'btn px-1 text-sm',
+                            row.reason === o.value ? 'btn-primary' : 'btn-ghost',
+                          )}
+                          onClick={() => patch(idx, { reason: o.value })}
+                        >
+                          {o.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs text-ink-400">
+                      {formatPacks(gap, row.bal)}{' '}
+                      <span className={flagged ? 'text-warn-500' : ''}>
+                        {ISSUE_LABEL[row.reason]}
+                      </span>
+                    </p>
+                    <button
+                      className="btn btn-ghost text-sm px-4 shrink-0"
+                      onClick={() => patch(idx, { issueOpen: true })}
+                    >
+                      Log issue
+                    </button>
+                  </div>
+                ))}
             </li>
           )
         })}
@@ -249,7 +310,12 @@ export default function BringBack() {
 
       {error && <p className="text-sm text-bad-500">{error}</p>}
 
-      <div className="fixed bottom-16 inset-x-0 p-3 bg-ink-950/95 backdrop-blur border-t border-ink-800">
+      <div className="fixed bottom-16 inset-x-0 p-3 bg-ink-950/95 backdrop-blur border-t border-ink-800 space-y-1">
+        {issueCount > 0 && (
+          <p className="text-xs text-warn-500 text-center">
+            {issueCount} issue{issueCount === 1 ? '' : 's'} logged
+          </p>
+        )}
         <button className="btn btn-primary w-full" onClick={() => void post()} disabled={busy}>
           {busy ? 'Saving…' : 'Record return'}
         </button>
