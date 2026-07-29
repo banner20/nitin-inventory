@@ -86,6 +86,16 @@ interface PackInfo {
  */
 export function formatQty(qty: number, item: PackInfo): string {
   const n = Number(qty)
+  // Negative stock is a books-are-wrong signal, not a quantity anyone will
+  // count out. "-2 bottles + 225 ml" is arithmetically true and unreadable;
+  // show the shortfall as a plain signed number instead.
+  if (n < 0) {
+    const packs = item.pack_label && item.pack_size > 1 ? -n / item.pack_size : -n
+    const unit =
+      item.pack_label && item.pack_size > 1 ? plural(item.pack_label, packs) : item.unit
+    return `−${trim(packs)} ${unit}`
+  }
+
   const exact = `${trim(n)} ${item.unit}`
   if (!item.pack_label || item.pack_size <= 1) return exact
 

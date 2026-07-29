@@ -4,6 +4,12 @@ import { useAuth } from '@/features/auth/AuthProvider'
 import { useAsync } from '@/lib/useAsync'
 import { fetchMyOpenBalances } from '@/lib/queries'
 import { postTxn, type PostLine } from '@/lib/txns'
+import {
+  AmountInput,
+  amountToBase,
+  usesPacks,
+  type AmountMode,
+} from '@/components/AmountInput'
 import { formatPacks, type LineCondition, type OpenBalance } from '@/lib/types'
 
 /** Reasons stock didn't come back, in the order a bar actually uses them. */
@@ -16,18 +22,13 @@ const REASONS: { value: LineCondition; label: string; hint: string }[] = [
 
 interface Row {
   bal: OpenBalance
-  /** Coming back, in packs where the item has them. */
   back: string
+  mode: AmountMode
   reason: LineCondition
 }
 
-function usesPacks(b: OpenBalance): boolean {
-  return Boolean(b.pack_label) && Number(b.pack_size) > 1
-}
-
 function toBase(row: Row): number {
-  const n = Number(row.back) || 0
-  return usesPacks(row.bal) ? n * Number(row.bal.pack_size) : n
+  return amountToBase(row.back, row.mode, row.bal)
 }
 
 function packsOut(b: OpenBalance): number {
@@ -72,7 +73,8 @@ export default function BringBack() {
     setRows(
       lines.map((bal) => ({
         bal,
-        back: bal.kind === 'returnable' ? String(packsOut(bal)) : '0',
+        back: bal.kind === 'returnable' ? String(Number(packsOut(bal).toFixed(3))) : '0',
+        mode: usesPacks(bal) ? 'pack' : 'base',
         reason: bal.kind === 'returnable' ? 'lost' : 'consumed',
       })),
     )
@@ -169,7 +171,13 @@ export default function BringBack() {
       <button
         className="btn btn-ghost w-full"
         onClick={() =>
-          setRows((rs) => rs.map((r) => ({ ...r, back: String(packsOut(r.bal)) })))
+          setRows((rs) =>
+            rs.map((r) => ({
+              ...r,
+              mode: usesPacks(r.bal) ? 'pack' : 'base',
+              back: String(Number(packsOut(r.bal).toFixed(3))),
+            })),
+          )
         }
       >
         Everything came back
@@ -190,24 +198,17 @@ export default function BringBack() {
                 </p>
               </div>
 
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-ink-400 w-20">Back</span>
-                <input
-                  className="input tabular text-center w-24"
-                  type="number"
-                  min={0}
-                  step="any"
-                  value={row.back}
-                  onChange={(e) =>
-                    setRows((rs) =>
-                      rs.map((r, i) => (i === idx ? { ...r, back: e.target.value } : r)),
-                    )
+              <div className="space-y-1">
+                <span className="text-sm text-ink-400">Coming back</span>
+                <AmountInput
+                  item={row.bal}
+                  amount={row.back}
+                  mode={row.mode}
+                  ariaLabel={`Amount of ${row.bal.item_name} coming back`}
+                  onChange={(back, mode) =>
+                    setRows((rs) => rs.map((r, i) => (i === idx ? { ...r, back, mode } : r)))
                   }
-                  aria-label={`Amount of ${row.bal.item_name} coming back`}
                 />
-                <span className="text-sm text-ink-400">
-                  {usesPacks(row.bal) ? `${row.bal.pack_label}s` : row.bal.unit}
-                </span>
               </div>
 
               {over && (

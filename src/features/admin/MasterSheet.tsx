@@ -17,6 +17,7 @@ export default function MasterSheet() {
   const [q, setQ] = useState('')
   const [categoryId, setCategoryId] = useState<string>('')
   const [onlyLow, setOnlyLow] = useState(false)
+  const [onlyImpossible, setOnlyImpossible] = useState(false)
   const [sort, setSort] = useState<SortKey>('name')
   const [adding, setAdding] = useState(false)
 
@@ -25,17 +26,22 @@ export default function MasterSheet() {
     if (q.trim()) list = list.filter((i) => itemMatches(i, q))
     if (categoryId) list = list.filter((i) => i.category_id === categoryId)
     if (onlyLow) list = list.filter((i) => i.below_min)
+    if (onlyImpossible) list = list.filter((i) => Number(i.qty_available) < 0)
     return [...list].sort((a, b) =>
       sort === 'name' ? a.name.localeCompare(b.name) : Number(b[sort]) - Number(a[sort]),
     )
-  }, [items.data, q, categoryId, onlyLow, sort])
+  }, [items.data, q, categoryId, onlyLow, onlyImpossible, sort])
 
   const totals = useMemo(() => {
     const list = items.data ?? []
     return {
       items: list.length,
-      out: list.reduce((s, i) => s + i.qty_out, 0),
+      out: list.filter((i) => Number(i.qty_out) > 0).length,
       low: list.filter((i) => i.below_min).length,
+      // Available below zero means the books disagree with reality — either
+      // stock went out that was never booked in, or something was counted
+      // twice. Either way a human has to look.
+      impossible: list.filter((i) => Number(i.qty_available) < 0).length,
     }
   }, [items.data])
 
@@ -48,6 +54,9 @@ export default function MasterSheet() {
             {totals.items} items · {totals.out} currently out
             {totals.low > 0 && (
               <span className="text-warn-500"> · {totals.low} below minimum</span>
+            )}
+            {totals.impossible > 0 && (
+              <span className="text-bad-500"> · {totals.impossible} impossible</span>
             )}
           </p>
         </div>
@@ -99,6 +108,16 @@ export default function MasterSheet() {
           <input type="checkbox" checked={onlyLow} onChange={(e) => setOnlyLow(e.target.checked)} />
           Below minimum
         </label>
+        {totals.impossible > 0 && (
+          <label className="flex items-center gap-2 px-3 text-sm text-bad-500">
+            <input
+              type="checkbox"
+              checked={onlyImpossible}
+              onChange={(e) => setOnlyImpossible(e.target.checked)}
+            />
+            Impossible stock
+          </label>
+        )}
       </div>
 
       {items.loading && <p className="text-sm text-ink-400">Loading…</p>}
@@ -170,8 +189,18 @@ function Row({ row }: { row: ItemAvailability }) {
       </td>
       <td className="p-3 text-right tabular font-semibold">
         <span
-          className={row.below_min ? 'text-warn-500' : 'text-white'}
-          title={formatQty(row.qty_available, row)}
+          className={
+            Number(row.qty_available) < 0
+              ? 'text-bad-500'
+              : row.below_min
+                ? 'text-warn-500'
+                : 'text-white'
+          }
+          title={
+            Number(row.qty_available) < 0
+              ? 'More has gone out than was ever booked in — the books disagree with reality.'
+              : formatQty(row.qty_available, row)
+          }
         >
           {formatQty(row.qty_available, row)}
         </span>

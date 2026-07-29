@@ -1,10 +1,16 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { useAsync } from '@/lib/useAsync'
 import { fetchItemAvailability } from '@/lib/queries'
-import { fetchActiveEvents } from '@/lib/events'
+import { createEvent, fetchActiveEvents } from '@/lib/events'
 import { postTxn, type PostLine } from '@/lib/txns'
+import {
+  AmountInput,
+  amountToBase,
+  usesPacks,
+  type AmountMode,
+} from '@/components/AmountInput'
 import {
   formatPacks,
   itemMatches,
@@ -14,23 +20,18 @@ import {
 
 interface BasketRow {
   item: ItemAvailability
-  /** In packs when the item has them, else base units. */
   amount: string
-}
-
-function usesPacks(item: ItemAvailability): boolean {
-  return Boolean(item.pack_label) && Number(item.pack_size) > 1
+  mode: AmountMode
 }
 
 function toBase(row: BasketRow): number {
-  const n = Number(row.amount) || 0
-  return usesPacks(row.item) ? n * Number(row.item.pack_size) : n
+  return amountToBase(row.amount, row.mode, row.item)
 }
 
 /**
- * Signing stock out to an event. Deliberately two steps — pick the job, then
- * fill the van — because "which event is this for" is the one thing that must
- * never be guessed.
+ * Signing stock out to an event. Two steps — pick the job, then fill the van —
+ * because "which event is this for" is the one thing that must never be
+ * guessed.
  */
 export default function TakeOut() {
   const { profile } = useAuth()
@@ -48,9 +49,15 @@ export default function TakeOut() {
 
   const matches = useMemo(() => {
     if (!q.trim()) return []
-    return (items.data ?? []).filter((i) => itemMatches(i, q) && !chosen.has(i.item_id)).slice(0, 10)
+    return (items.data ?? [])
+      .filter((i) => itemMatches(i, q) && !chosen.has(i.item_id))
+      .slice(0, 10)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q, items.data, basket])
+
+  function patch(id: string, next: Partial<BasketRow>) {
+    setBasket((b) => b.map((x) => (x.item.item_id === id ? { ...x, ...next } : x)))
+  }
 
   async function post() {
     if (!event || !profile) return
@@ -63,12 +70,7 @@ export default function TakeOut() {
 
       if (lines.length === 0) throw new Error('Add something first.')
 
-      await postTxn({
-        type: 'OUT',
-        lines,
-        eventId: event.id,
-        personId: profile.id,
-      })
+      await postTxn({ type: 'OUT', lines, eventId: event.id, personId: profile.id })
       navigate('/', { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save.')
@@ -79,46 +81,17 @@ export default function TakeOut() {
 
   // ---- step 1: which job? --------------------------------------------------
   if (!event) {
-    const list = events.data ?? []
     return (
-      <div className="space-y-4">
-        <header>
-          <h1 className="text-lg font-semibold text-white">Taking stock out</h1>
-          <p className="text-sm text-ink-400">Which event is this for?</p>
-        </header>
-
-        {events.loading && <p className="text-sm text-ink-400">Loading…</p>}
-        {events.error && <p className="text-sm text-bad-500">{events.error.message}</p>}
-
-        {!events.loading && list.length === 0 && (
-          <div className="card p-5 text-center space-y-2">
-            <p className="text-sm text-ink-400">No events are open right now.</p>
-            <p className="text-xs text-ink-600">
-              A manager needs to create one before stock can go out.
-            </p>
-          </div>
-        )}
-
-        <ul className="space-y-2">
-          {list.map((e) => (
-            <li key={e.id}>
-              <button
-                className="card w-full text-left p-4 hover:border-brand-500 transition-colors"
-                onClick={() => setEvent(e)}
-              >
-                <p className="font-medium text-white">{e.name}</p>
-                <p className="text-sm text-ink-400">
-                  {e.venue ? `${e.venue} · ` : ''}
-                  {new Date(e.starts_at).toLocaleDateString('en-IN', {
-                    day: 'numeric',
-                    month: 'short',
-                  })}
-                </p>
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
+      <EventStep
+        events={events.data ?? []}
+        loading={events.loading}
+        error={events.error}
+        onPick={setEvent}
+        onCreated={(e) => {
+          events.reload()
+          setEvent(e)
+        }}
+      />
     )
   }
 
@@ -151,7 +124,10 @@ export default function TakeOut() {
               <button
                 className="w-full text-left px-3 py-3 hover:bg-ink-850 flex justify-between gap-3 items-center"
                 onClick={() => {
-                  setBasket((b) => [...b, { item: m, amount: '1' }])
+                  setBasket((b) => [
+                    ...b,
+                    { item: m, amount: '1', mode: usesPacks(m) ? 'pack' : 'base' },
+                  ])
                   setQ('')
                 }}
               >
@@ -200,64 +176,14 @@ export default function TakeOut() {
                   </button>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    className="btn btn-ghost size-11 min-h-11 px-0 text-lg"
-                    onClick={() =>
-                      setBasket((b) =>
-                        b.map((x) =>
-                          x.item.item_id === row.item.item_id
-                            ? { ...x, amount: String(Math.max(0, (Number(x.amount) || 0) - 1)) }
-                            : x,
-                        ),
-                      )
-                    }
-                    aria-label="One less"
-                  >
-                    −
-                  </button>
-                  <input
-                    className="input tabular text-center w-20"
-                    type="number"
-                    min={0}
-                    step="any"
-                    value={row.amount}
-                    onChange={(e) =>
-                      setBasket((b) =>
-                        b.map((x) =>
-                          x.item.item_id === row.item.item_id
-                            ? { ...x, amount: e.target.value }
-                            : x,
-                        ),
-                      )
-                    }
-                    aria-label={`Quantity of ${row.item.name}`}
-                  />
-                  <button
-                    className="btn btn-ghost size-11 min-h-11 px-0 text-lg"
-                    onClick={() =>
-                      setBasket((b) =>
-                        b.map((x) =>
-                          x.item.item_id === row.item.item_id
-                            ? { ...x, amount: String((Number(x.amount) || 0) + 1) }
-                            : x,
-                        ),
-                      )
-                    }
-                    aria-label="One more"
-                  >
-                    +
-                  </button>
-                  <span className="text-sm text-ink-400">
-                    {usesPacks(row.item) ? `${row.item.pack_label}s` : row.item.unit}
-                  </span>
-                </div>
-
-                {usesPacks(row.item) && Number(row.amount) > 0 && (
-                  <p className="text-xs text-ink-600 tabular">
-                    = {toBase(row).toLocaleString('en-IN')} {row.item.unit}
-                  </p>
-                )}
+                <AmountInput
+                  item={row.item}
+                  amount={row.amount}
+                  mode={row.mode}
+                  withSteppers
+                  ariaLabel={`Quantity of ${row.item.name}`}
+                  onChange={(amount, mode) => patch(row.item.item_id, { amount, mode })}
+                />
 
                 {short && (
                   <p className="text-xs text-warn-500">
@@ -275,17 +201,165 @@ export default function TakeOut() {
 
       {basket.length > 0 && (
         <div className="fixed bottom-16 inset-x-0 p-3 bg-ink-950/95 backdrop-blur border-t border-ink-800">
-          <button
-            className="btn btn-primary w-full"
-            onClick={() => void post()}
-            disabled={busy}
-          >
-            {busy
-              ? 'Saving…'
-              : `Take out ${basket.length} item${basket.length === 1 ? '' : 's'}`}
+          <button className="btn btn-primary w-full" onClick={() => void post()} disabled={busy}>
+            {busy ? 'Saving…' : `Take out ${basket.length} item${basket.length === 1 ? '' : 's'}`}
           </button>
         </div>
       )}
     </div>
+  )
+}
+
+function EventStep({
+  events,
+  loading,
+  error,
+  onPick,
+  onCreated,
+}: {
+  events: EventRecord[]
+  loading: boolean
+  error: Error | null
+  onPick: (e: EventRecord) => void
+  onCreated: (e: EventRecord) => void
+}) {
+  const [adding, setAdding] = useState(false)
+
+  return (
+    <div className="space-y-4">
+      <header>
+        <h1 className="text-lg font-semibold text-white">Taking stock out</h1>
+        <p className="text-sm text-ink-400">Which event is this for?</p>
+      </header>
+
+      {loading && <p className="text-sm text-ink-400">Loading…</p>}
+      {error && <p className="text-sm text-bad-500">{error.message}</p>}
+
+      {!loading && events.length === 0 && !adding && (
+        <div className="card p-5 text-center text-sm text-ink-400">
+          No events are open. Create one below to get loading.
+        </div>
+      )}
+
+      <ul className="space-y-2">
+        {events.map((e) => (
+          <li key={e.id}>
+            <button
+              className="card w-full text-left p-4 hover:border-brand-500 transition-colors"
+              onClick={() => onPick(e)}
+            >
+              <p className="font-medium text-white">{e.name}</p>
+              <p className="text-sm text-ink-400">
+                {e.venue ? `${e.venue} · ` : ''}
+                {new Date(e.starts_at).toLocaleDateString('en-IN', {
+                  day: 'numeric',
+                  month: 'short',
+                })}
+              </p>
+            </button>
+          </li>
+        ))}
+      </ul>
+
+      {adding ? (
+        <QuickEventForm onCreated={onCreated} onCancel={() => setAdding(false)} />
+      ) : (
+        <button className="btn btn-ghost w-full" onClick={() => setAdding(true)}>
+          + New event
+        </button>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Deliberately just a name and a finish time. Anything more is admin, and the
+ * person standing next to a loaded van shouldn't be doing admin — a manager can
+ * fill in the client and venue afterwards.
+ */
+function QuickEventForm({
+  onCreated,
+  onCancel,
+}: {
+  onCreated: (e: EventRecord) => void
+  onCancel: () => void
+}) {
+  const [name, setName] = useState('')
+  const [days, setDays] = useState(1)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function submit(e: FormEvent) {
+    e.preventDefault()
+    setBusy(true)
+    setError(null)
+    try {
+      const now = new Date()
+      const end = new Date(now.getTime() + days * 24 * 60 * 60 * 1000)
+      const created = await createEvent({
+        name,
+        startsAt: now.toISOString(),
+        endsAt: end.toISOString(),
+      })
+      onCreated(created)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not create the event.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="card p-4 space-y-3">
+      <h2 className="font-semibold text-white">New event</h2>
+
+      <label className="space-y-1.5 block">
+        <span className="text-sm text-ink-400">What's the job?</span>
+        <input
+          className="input"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Sharma sangeet — Taj"
+          autoFocus
+          required
+        />
+      </label>
+
+      <div className="space-y-1.5">
+        <span className="text-sm text-ink-400">Back by</span>
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { d: 1, label: 'Tomorrow' },
+            { d: 2, label: '2 days' },
+            { d: 4, label: '4 days' },
+          ].map((o) => (
+            <button
+              key={o.d}
+              type="button"
+              onClick={() => setDays(o.d)}
+              className={
+                'btn ' + (days === o.d ? 'btn-primary' : 'btn-ghost')
+              }
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-ink-600">
+          This is only what makes stock show as overdue — a manager can change it.
+        </p>
+      </div>
+
+      {error && <p className="text-sm text-bad-500">{error}</p>}
+
+      <div className="flex gap-2">
+        <button type="submit" className="btn btn-primary flex-1" disabled={busy || !name.trim()}>
+          {busy ? 'Creating…' : 'Create and load'}
+        </button>
+        <button type="button" className="btn btn-ghost" onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+    </form>
   )
 }
