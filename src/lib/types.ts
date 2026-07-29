@@ -191,6 +191,7 @@ export interface OpenBalance {
   pack_label: string | null
   event_name: string
   ends_at: string
+  event_created_at: string
   overdue: boolean
 }
 

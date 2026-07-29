@@ -1,9 +1,10 @@
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { useAsync } from '@/lib/useAsync'
 import { fetchMyOpenBalances } from '@/lib/queries'
 import { IconIn, IconOut } from '@/components/icons'
-import { formatPacks } from '@/lib/types'
+import { formatPacks, type OpenBalance } from '@/lib/types'
 
 /**
  * "What am I still holding?" — the question the whole app exists to answer,
@@ -23,13 +24,22 @@ export default function CrewHome() {
   const totalItems = balances.length
   const overdue = balances.filter((b) => b.overdue)
 
-  // Group by event so it reads like "this job, these things".
-  const byEvent = new Map<string, typeof balances>()
-  for (const b of balances) {
-    const list = byEvent.get(b.event_id) ?? []
-    list.push(b)
-    byEvent.set(b.event_id, list)
-  }
+  // Group by event, most recently created first — the job someone is
+  // mid-way through right now, not whichever sorts first alphabetically.
+  const events = useMemo(() => {
+    const map = new Map<string, OpenBalance[]>()
+    for (const b of balances) {
+      const list = map.get(b.event_id) ?? []
+      list.push(b)
+      map.set(b.event_id, list)
+    }
+    return [...map.entries()].sort(
+      ([, a], [, b]) =>
+        new Date(b[0]?.event_created_at ?? 0).getTime() -
+        new Date(a[0]?.event_created_at ?? 0).getTime(),
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [balances])
 
   return (
     <div className="space-y-5">
@@ -77,39 +87,67 @@ export default function CrewHome() {
           </p>
         )}
 
-        {[...byEvent.entries()].map(([eventId, lines]) => {
-          const first = lines[0]
-          if (!first) return null
-          return (
-            <div key={eventId} className="card divide-y divide-ink-800">
-              <div className="p-3 flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-medium text-white truncate">{first.event_name}</p>
-                  <p className="text-xs text-ink-400">
-                    Due {new Date(first.ends_at).toLocaleDateString()}
-                  </p>
-                </div>
-                {first.overdue && (
-                  <span className="text-xs font-semibold text-warn-500 shrink-0">Overdue</span>
-                )}
-              </div>
-              <ul className="divide-y divide-ink-800">
-                {lines.map((line) => (
-                  <li key={line.item_id} className="px-3 py-2 flex justify-between gap-3 text-sm">
-                    <span className="text-ink-200 truncate">{line.item_name}</span>
-                    <span
-                      className="tabular text-ink-400 shrink-0"
-                      title={`${line.outstanding} ${line.unit}`}
-                    >
-                      {formatPacks(line.outstanding, line)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )
-        })}
+        {events.map(([eventId, lines]) => (
+          <EventGroup key={eventId} lines={lines} />
+        ))}
       </section>
+    </div>
+  )
+}
+
+function EventGroup({ lines }: { lines: OpenBalance[] }) {
+  const [open, setOpen] = useState(false)
+  const first = lines[0]
+  if (!first) return null
+
+  return (
+    <div className="card overflow-hidden">
+      <button
+        className="w-full p-3 flex items-center justify-between gap-3 text-left"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+      >
+        <div className="min-w-0">
+          <p className="font-medium text-white truncate">{first.event_name}</p>
+          <p className="text-xs text-ink-400">
+            {lines.length} item{lines.length === 1 ? '' : 's'} · Due{' '}
+            {new Date(first.ends_at).toLocaleDateString()}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {first.overdue && (
+            <span className="text-xs font-semibold text-warn-500">Overdue</span>
+          )}
+          <svg
+            viewBox="0 0 24 24"
+            className={`size-5 text-ink-400 transition-transform ${open ? 'rotate-180' : ''}`}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </div>
+      </button>
+
+      {open && (
+        <ul className="divide-y divide-ink-800 border-t border-ink-800">
+          {lines.map((line) => (
+            <li key={line.item_id} className="px-3 py-2 flex justify-between gap-3 text-sm">
+              <span className="text-ink-200 truncate">{line.item_name}</span>
+              <span
+                className="tabular text-ink-400 shrink-0"
+                title={`${line.outstanding} ${line.unit}`}
+              >
+                {formatPacks(line.outstanding, line)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }
