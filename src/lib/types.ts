@@ -237,6 +237,7 @@ export interface TxnLine {
 export interface OpenBalance {
   event_id: string
   person_id: string
+  person_name: string
   item_id: string
   qty_out: number
   qty_back: number
