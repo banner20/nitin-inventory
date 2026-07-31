@@ -1,26 +1,33 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAsync } from '@/lib/useAsync'
-import { fetchItemAvailability, fetchOverdueBalances, fetchProfiles } from '@/lib/queries'
+import {
+  fetchExpiringItems,
+  fetchItemAvailability,
+  fetchOverdueBalances,
+  fetchProfiles,
+} from '@/lib/queries'
 import { fetchDuplicateCandidates, mergeItems, postTxn, type DuplicateCandidate } from '@/lib/txns'
 import { formatPacks, type ItemAvailability, type OpenBalance } from '@/lib/types'
 
 /**
  * Everything the system knows needs a human decision, in one place: possible
- * duplicate items, stock that doesn't add up, and gear still out past its
- * event.
+ * duplicate items, stock that doesn't add up, gear still out past its event,
+ * and things about to go off.
  */
 export default function ConflictQueue() {
   const items = useAsync(fetchItemAvailability, [])
   const duplicates = useAsync(fetchDuplicateCandidates, [])
   const overdue = useAsync(fetchOverdueBalances, [])
   const profiles = useAsync(fetchProfiles, [])
+  const expiring = useAsync(fetchExpiringItems, [])
 
   const needsReview = (items.data ?? []).filter((i) => Number(i.qty_available) < 0)
 
   const total = duplicates.data?.length ?? 0
   const totalReview = needsReview.length
   const totalOverdue = overdue.data?.length ?? 0
+  const totalExpiring = expiring.data?.length ?? 0
 
   return (
     <div className="space-y-8 max-w-4xl">
@@ -52,17 +59,88 @@ export default function ConflictQueue() {
         onWrittenOff={() => overdue.reload()}
       />
 
+      <ExpiringSection
+        items={expiring.data ?? []}
+        loading={expiring.loading}
+        error={expiring.error}
+      />
+
       {!duplicates.loading &&
         !items.loading &&
         !overdue.loading &&
+        !expiring.loading &&
         total === 0 &&
         totalReview === 0 &&
-        totalOverdue === 0 && (
+        totalOverdue === 0 &&
+        totalExpiring === 0 && (
           <div className="card p-6 text-center text-sm text-ink-400">
             Nothing needs attention right now.
           </div>
         )}
     </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Expiring soon
+// ---------------------------------------------------------------------------
+
+function ExpiringSection({
+  items,
+  loading,
+  error,
+}: {
+  items: ItemAvailability[]
+  loading: boolean
+  error: Error | null
+}) {
+  return (
+    <section className="space-y-3">
+      <h2 className="font-semibold text-white">
+        Expiring soon {items.length > 0 && `(${items.length})`}
+      </h2>
+      <p className="text-sm text-ink-400">
+        Within 60 days, or already past. Sort out what's still good before it becomes waste.
+      </p>
+
+      {loading && <p className="text-sm text-ink-400">Loading…</p>}
+      {error && <p className="text-sm text-bad-500">{error.message}</p>}
+
+      {!loading && items.length === 0 && (
+        <div className="card p-4 text-sm text-ink-400">Nothing expiring soon.</div>
+      )}
+
+      {items.length > 0 && (
+        <ul className="card divide-y divide-ink-800">
+          {items.map((i) => {
+            const expired = new Date(i.expiry_date!).getTime() < Date.now()
+            return (
+              <li key={i.item_id} className="p-3 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-white truncate">{i.name}</p>
+                  <p className={`text-xs ${expired ? 'text-bad-500' : 'text-warn-500'}`}>
+                    {expired ? 'Expired' : 'Expires'}{' '}
+                    {new Date(i.expiry_date!).toLocaleDateString('en-IN', {
+                      day: 'numeric',
+                      month: 'short',
+                      year: 'numeric',
+                    })}
+                    {' · '}
+                    {formatPacks(i.qty_available, i)} on hand
+                  </p>
+                </div>
+                <Link
+                  to="/admin"
+                  className="btn btn-ghost h-9 min-h-9 text-sm px-3 shrink-0"
+                >
+                  Open on master sheet
+                </Link>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </section>
   )
 }
 

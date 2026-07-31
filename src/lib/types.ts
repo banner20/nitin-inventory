@@ -49,6 +49,20 @@ export interface Item {
   pack_size: number
   /** What one pack is called — bottle, crate, bag. Null means loose. */
   pack_label: string | null
+  expiry_date: string | null
+}
+
+/**
+ * An extra way to count the same item, beyond its default pack — Hazelnut
+ * syrup bought as both 250ml bottles (the default) and a 1L jug (an
+ * AltPack). Every quantity still lands in the same base-unit ledger; this
+ * only changes what the person entering it gets to type against.
+ */
+export interface AltPack {
+  id: string
+  pack_size: number
+  pack_label: string
+  sku: string | null
 }
 
 /** An item plus its derived stock position. Never stored — always computed. */
@@ -73,6 +87,15 @@ export interface ItemAvailability {
   pack_size: number
   /** What one pack is called — bottle, crate, bag. Null means loose. */
   pack_label: string | null
+  /** Extra pack sizes this item is also bought in, beyond the default above. */
+  alt_packs: AltPack[] | null
+  expiry_date: string | null
+  /** Read from purchase history, not stored — the last ADD line's vendor,
+   * cost, and when. Answers "who did we last buy this from, and for how
+   * much" without a static field that can silently go stale. */
+  last_vendor: string | null
+  last_unit_cost: number | null
+  last_purchased_at: string | null
 }
 
 export type ItemKind = 'returnable' | 'consumable'
@@ -103,6 +126,11 @@ export function toItemAvailability(item: Item, categories: Category[]): ItemAvai
     kind: item.kind,
     pack_size: item.pack_size,
     pack_label: item.pack_label,
+    alt_packs: [],
+    expiry_date: item.expiry_date,
+    last_vendor: null,
+    last_unit_cost: null,
+    last_purchased_at: null,
   }
 }
 
@@ -223,6 +251,7 @@ export interface OpenBalance {
   kind: ItemKind
   pack_size: number
   pack_label: string | null
+  alt_packs: AltPack[] | null
   event_name: string
   ends_at: string
   event_created_at: string

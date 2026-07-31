@@ -4,30 +4,29 @@ import { useAsync } from '@/lib/useAsync'
 import { fetchItemAvailability } from '@/lib/queries'
 import { fetchCategories, postTxn, type PostLine } from '@/lib/txns'
 import { formatPacks, itemMatches, toItemAvailability, type ItemAvailability } from '@/lib/types'
+import {
+  AmountInput,
+  amountToBase,
+  defaultMode,
+  packOptions,
+  type AmountMode,
+} from '@/components/AmountInput'
 import ItemForm from './ItemForm'
 
 interface DraftRow {
   item: ItemAvailability
-  /** Entered in packs when the item has them (bottles), else in base units. */
   amount: string
-  /** Cost of one pack — how invoices are actually written. */
+  mode: AmountMode
+  /** Cost of one whatever-unit-is-selected — how invoices are actually written. */
   packCost: string
 }
 
-/** Packs the person typed -> base units the ledger stores. */
-function toBaseUnits(row: DraftRow): number {
-  const n = Number(row.amount) || 0
-  return usesPacks(row.item) ? n * Number(row.item.pack_size) : n
-}
-
-function usesPacks(item: ItemAvailability): boolean {
-  return Boolean(item.pack_label) && Number(item.pack_size) > 1
+function toBase(row: DraftRow): number {
+  return amountToBase(row.amount, row.mode, row.item)
 }
 
 function lineTotal(row: DraftRow): number {
-  const cost = Number(row.packCost) || 0
-  const n = Number(row.amount) || 0
-  return cost * n
+  return (Number(row.packCost) || 0) * (Number(row.amount) || 0)
 }
 
 /**
@@ -61,7 +60,7 @@ export default function StockIn() {
     const wanted = searchParams.get('item')
     if (!wanted || !items.data) return
     const found = items.data.find((i) => i.item_id === wanted)
-    if (found) setRows((r) => (chosen.has(wanted) ? r : [...r, { item: found, amount: '1', packCost: '' }]))
+    if (found) addRow(found)
     setSearchParams((p) => {
       p.delete('item')
       return p
@@ -79,16 +78,26 @@ export default function StockIn() {
 
   const totalValue = rows.reduce((sum, r) => sum + lineTotal(r), 0)
 
-  function add(item: ItemAvailability) {
-    setRows((r) => [...r, { item, amount: '1', packCost: '' }])
+  /** Adding an item prefills what it usually costs and who it usually comes
+   * from — a hint to edit, not a silent default — so re-ordering the same
+   * thing doesn't mean retyping a price you already paid last time. */
+  function addRow(item: ItemAvailability) {
+    const mode = defaultMode(item)
+    const packSize = packOptions(item).find((o) => o.id === mode)?.size ?? 1
+    const packCost =
+      item.last_unit_cost != null ? String(Number((item.last_unit_cost * packSize).toFixed(2))) : ''
+
+    setRows((r) => [...r, { item, amount: '1', mode, packCost }])
     setQ('')
+
+    if (!vendor.trim() && item.last_vendor) setVendor(item.last_vendor)
   }
 
   /** A brand-new item created straight from Stock In drops right into the
    * basket — no separate trip to the master sheet to add it first. */
   function onItemCreated(item: Parameters<typeof toItemAvailability>[0]) {
     const withStock = toItemAvailability(item, cats.data ?? [])
-    setRows((r) => [...r, { item: withStock, amount: '1', packCost: '' }])
+    setRows((r) => [...r, { item: withStock, amount: '1', mode: defaultMode(withStock), packCost: '' }])
     setCreatingName(null)
     setQ('')
     items.reload()
@@ -107,11 +116,10 @@ export default function StockIn() {
     setError(null)
     try {
       const lines: PostLine[] = rows.map((r) => {
-        const qty = toBaseUnits(r)
+        const qty = toBase(r)
         // Store cost per base unit so line value stays qty * unit_cost no
-        // matter which way it was typed in.
-        const perBase =
-          r.packCost === '' || qty === 0 ? null : lineTotal(r) / qty
+        // matter which unit it was typed in.
+        const perBase = r.packCost === '' || qty === 0 ? null : lineTotal(r) / qty
         return {
           item_id: r.item.item_id,
           qty,
@@ -202,7 +210,7 @@ export default function StockIn() {
                 <li key={m.item_id}>
                   <button
                     className="w-full text-left px-3 py-2 hover:bg-ink-850 flex justify-between gap-3"
-                    onClick={() => add(m)}
+                    onClick={() => addRow(m)}
                   >
                     <span className="text-ink-200">{m.name}</span>
                     <span className="text-xs text-ink-600 shrink-0">
@@ -227,76 +235,58 @@ export default function StockIn() {
       </div>
 
       {rows.length > 0 && (
-        <div className="card overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-left text-ink-400 border-b border-ink-800">
-              <tr>
-                <th className="p-3 font-medium">Item</th>
-                <th className="p-3 font-medium w-40">How many</th>
-                <th className="p-3 font-medium w-36">Cost each (₹)</th>
-                <th className="p-3 font-medium text-right w-32">Line total</th>
-                <th className="w-12" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-ink-800">
-              {rows.map((r) => (
-                <tr key={r.item.item_id}>
-                  <td className="p-3">
-                    <span className="text-white">{r.item.name}</span>
-                    <span className="block text-xs text-ink-600">
-                      {usesPacks(r.item)
-                        ? `${r.item.pack_size} ${r.item.unit} per ${r.item.pack_label}`
-                        : r.item.unit}
-                    </span>
-                  </td>
-                  <td className="p-2">
-                    <div className="flex items-center gap-2">
-                      <input
-                        className="input tabular h-10 min-h-10 w-20"
-                        type="number"
-                        min={0}
-                        step="any"
-                        value={r.amount}
-                        onChange={(e) => update(r.item.item_id, { amount: e.target.value })}
-                      />
-                      <span className="text-xs text-ink-400 whitespace-nowrap">
-                        {usesPacks(r.item) ? `${r.item.pack_label}s` : r.item.unit}
-                      </span>
-                    </div>
-                    {usesPacks(r.item) && Number(r.amount) > 0 && (
-                      <span className="block text-xs text-ink-600 mt-1 tabular">
-                        = {toBaseUnits(r).toLocaleString('en-IN')} {r.item.unit}
-                      </span>
-                    )}
-                  </td>
-                  <td className="p-2">
-                    <input
-                      className="input tabular h-10 min-h-10"
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      value={r.packCost}
-                      onChange={(e) => update(r.item.item_id, { packCost: e.target.value })}
-                      placeholder={usesPacks(r.item) ? `per ${r.item.pack_label}` : '—'}
-                    />
-                  </td>
-                  <td className="p-3 text-right tabular text-ink-400">
-                    {r.packCost ? `₹${lineTotal(r).toLocaleString('en-IN')}` : '—'}
-                  </td>
-                  <td className="p-2 text-right">
-                    <button
-                      className="text-ink-600 hover:text-bad-500 px-2"
-                      onClick={() => remove(r.item.item_id)}
-                      aria-label={`Remove ${r.item.name}`}
-                    >
-                      ✕
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ul className="space-y-2">
+          {rows.map((r) => (
+            <li key={r.item.item_id} className="card p-3 space-y-2">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-white truncate">{r.item.name}</p>
+                  {r.item.last_vendor && (
+                    <p className="text-xs text-ink-600">
+                      Last from {r.item.last_vendor}
+                      {r.item.last_unit_cost != null &&
+                        ` · ₹${r.item.last_unit_cost.toLocaleString('en-IN')}/${r.item.unit}`}
+                    </p>
+                  )}
+                </div>
+                <button
+                  className="text-ink-600 hover:text-bad-500 px-2"
+                  onClick={() => remove(r.item.item_id)}
+                  aria-label={`Remove ${r.item.name}`}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="flex flex-wrap items-end gap-3">
+                <AmountInput
+                  item={r.item}
+                  amount={r.amount}
+                  mode={r.mode}
+                  ariaLabel={`Quantity of ${r.item.name}`}
+                  onChange={(amount, mode) => update(r.item.item_id, { amount, mode })}
+                />
+
+                <label className="space-y-1.5">
+                  <span className="text-xs text-ink-400">Cost each</span>
+                  <input
+                    className="input tabular h-11 min-h-11 w-32"
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={r.packCost}
+                    onChange={(e) => update(r.item.item_id, { packCost: e.target.value })}
+                    placeholder="₹"
+                  />
+                </label>
+
+                <p className="text-sm text-ink-400 pb-2.5">
+                  {r.packCost ? `= ₹${lineTotal(r).toLocaleString('en-IN')}` : ''}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ul>
       )}
 
       {error && <p className="text-sm text-bad-500">{error}</p>}

@@ -1,6 +1,11 @@
 import { useState, type FormEvent } from 'react'
-import { createItem, findSimilarItems } from '@/lib/txns'
+import { createItem, findSimilarItems, setItemPacks } from '@/lib/txns'
 import type { Category, Item, ItemKind } from '@/lib/types'
+
+interface AltPackDraft {
+  packSize: string
+  packLabel: string
+}
 
 /**
  * Add-an-item, factored out so it behaves identically wherever it appears —
@@ -29,6 +34,8 @@ export default function ItemForm({
   const [sku, setSku] = useState('')
   const [minStock, setMinStock] = useState('0')
   const [aliases, setAliases] = useState('')
+  const [expiryDate, setExpiryDate] = useState('')
+  const [altPacks, setAltPacks] = useState<AltPackDraft[]>([])
   const [similar, setSimilar] = useState<{ id: string; name: string }[]>([])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -52,11 +59,21 @@ export default function ItemForm({
         kind,
         packSize: packSize ? Number(packSize) : undefined,
         packLabel: packLabel || null,
+        expiryDate: expiryDate || null,
         aliases: aliases
           .split(',')
           .map((a) => a.trim())
           .filter(Boolean),
       })
+
+      const validAltPacks = altPacks.filter((p) => p.packSize && p.packLabel.trim())
+      if (validAltPacks.length > 0) {
+        await setItemPacks(
+          item.id,
+          validAltPacks.map((p) => ({ packSize: Number(p.packSize), packLabel: p.packLabel })),
+        )
+      }
+
       onCreated(item)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not add the item.')
@@ -189,6 +206,16 @@ export default function ItemForm({
           />
         </label>
 
+        <label className="space-y-1.5">
+          <span className="text-sm text-ink-400">Expires (optional)</span>
+          <input
+            className="input"
+            type="date"
+            value={expiryDate}
+            onChange={(e) => setExpiryDate(e.target.value)}
+          />
+        </label>
+
         <label className="space-y-1.5 sm:col-span-2 lg:col-span-3">
           <span className="text-sm text-ink-400">
             Other names people call it, comma separated
@@ -201,6 +228,60 @@ export default function ItemForm({
           />
         </label>
       </div>
+
+      {(packSize || packLabel) && (
+        <div className="space-y-2 border-t border-ink-800 pt-4">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-ink-400">
+              Also bought in other sizes at once? (e.g. this syrup as bottles
+              <em>and</em> a bulk jug)
+            </span>
+            <button
+              type="button"
+              className="btn btn-ghost h-9 min-h-9 text-sm px-3"
+              onClick={() => setAltPacks((p) => [...p, { packSize: '', packLabel: '' }])}
+            >
+              + Add another size
+            </button>
+          </div>
+
+          {altPacks.map((p, i) => (
+            <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2">
+              <input
+                className="input tabular"
+                type="number"
+                min={0}
+                step="any"
+                value={p.packSize}
+                onChange={(e) =>
+                  setAltPacks((rows) =>
+                    rows.map((r, ri) => (ri === i ? { ...r, packSize: e.target.value } : r)),
+                  )
+                }
+                placeholder={`Size in ${unit}, e.g. 1000`}
+              />
+              <input
+                className="input"
+                value={p.packLabel}
+                onChange={(e) =>
+                  setAltPacks((rows) =>
+                    rows.map((r, ri) => (ri === i ? { ...r, packLabel: e.target.value } : r)),
+                  )
+                }
+                placeholder="jug, case, tin…"
+              />
+              <button
+                type="button"
+                className="text-ink-600 hover:text-bad-500 px-2"
+                onClick={() => setAltPacks((rows) => rows.filter((_, ri) => ri !== i))}
+                aria-label="Remove this size"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {similar.length > 0 && (
         <div className="rounded-lg border border-warn-500/40 bg-warn-500/10 p-3 text-sm">

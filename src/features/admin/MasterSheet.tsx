@@ -180,7 +180,18 @@ export default function MasterSheet() {
   )
 }
 
+/** Amber inside 60 days, red once it's passed — same visual language as the
+ * "doesn't add up" flag elsewhere on this sheet. */
+function expiryStatus(dateStr: string): 'expired' | 'soon' | null {
+  const days = (new Date(dateStr).getTime() - Date.now()) / 86_400_000
+  if (days < 0) return 'expired'
+  if (days <= 60) return 'soon'
+  return null
+}
+
 function Row({ row }: { row: ItemAvailability }) {
+  const status = row.expiry_date ? expiryStatus(row.expiry_date) : null
+
   return (
     <tr className="hover:bg-ink-850">
       <td className="p-3">
@@ -196,7 +207,29 @@ function Row({ row }: { row: ItemAvailability }) {
         )}
         <span className="block text-xs text-ink-600">
           {row.pack_label ? `${row.pack_size} ${row.unit} per ${row.pack_label}` : row.unit}
+          {row.alt_packs && row.alt_packs.length > 0 && (
+            <> · also {row.alt_packs.map((p) => `${p.pack_size} ${row.unit} per ${p.pack_label}`).join(', ')}</>
+          )}
         </span>
+        {(row.last_vendor || row.last_unit_cost != null) && (
+          <span className="block text-xs text-ink-600">
+            {row.last_vendor}
+            {row.last_vendor && row.last_unit_cost != null && ' · '}
+            {row.last_unit_cost != null && `₹${row.last_unit_cost.toLocaleString('en-IN')}/${row.unit}`}
+          </span>
+        )}
+        {status && (
+          <span
+            className={`block text-xs ${status === 'expired' ? 'text-bad-500' : 'text-warn-500'}`}
+          >
+            {status === 'expired' ? 'Expired' : 'Expires'}{' '}
+            {new Date(row.expiry_date!).toLocaleDateString('en-IN', {
+              day: 'numeric',
+              month: 'short',
+              year: 'numeric',
+            })}
+          </span>
+        )}
       </td>
       <td className="p-3 text-right tabular text-ink-400">
         {Number(row.qty_owned) ? formatPacks(row.qty_owned, row) : ''}

@@ -8,7 +8,7 @@ import { postTxn, type PostLine } from '@/lib/txns'
 import {
   AmountInput,
   amountToBase,
-  usesPacks,
+  defaultMode,
   type AmountMode,
 } from '@/components/AmountInput'
 import {
@@ -124,10 +124,7 @@ export default function TakeOut() {
               <button
                 className="w-full text-left px-3 py-3 hover:bg-ink-850 flex justify-between gap-3 items-center"
                 onClick={() => {
-                  setBasket((b) => [
-                    ...b,
-                    { item: m, amount: '1', mode: usesPacks(m) ? 'pack' : 'base' },
-                  ])
+                  setBasket((b) => [...b, { item: m, amount: '1', mode: defaultMode(m) }])
                   setQ('')
                 }}
               >

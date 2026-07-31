@@ -13,6 +13,8 @@ const TEMPLATE_COLUMNS = [
   'sku',
   'min_stock',
   'aliases',
+  'alt_packs',
+  'expiry_date',
 ]
 
 const TEMPLATE_ROWS: Record<string, string>[] = [
@@ -26,6 +28,8 @@ const TEMPLATE_ROWS: Record<string, string>[] = [
     sku: 'SPR-GIN-LD',
     min_stock: '3000',
     aliases: 'gin;london dry;dry gin',
+    alt_packs: '',
+    expiry_date: '',
   },
   {
     name: 'Highball Glass',
@@ -37,6 +41,21 @@ const TEMPLATE_ROWS: Record<string, string>[] = [
     sku: 'GLS-HIG-01',
     min_stock: '200',
     aliases: 'highball;tall glass',
+    alt_packs: '',
+    expiry_date: '',
+  },
+  {
+    name: 'Hazelnut Syrup',
+    category: 'Syrups & Sweeteners',
+    kind: 'consumable',
+    unit: 'ml',
+    pack_size: '250',
+    pack_label: 'bottle',
+    sku: 'SYR-HAZ-01',
+    min_stock: '1000',
+    aliases: 'hazelnut',
+    alt_packs: '1000:jug',
+    expiry_date: '2026-12-01',
   },
 ]
 

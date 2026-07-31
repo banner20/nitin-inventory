@@ -51,6 +51,22 @@ export async function fetchItemAvailability(): Promise<ItemAvailability[]> {
   return (data ?? []) as ItemAvailability[]
 }
 
+/** Items expiring within 60 days or already past — the conflict queue's
+ * "Expiring soon" list, soonest first. */
+export async function fetchExpiringItems(): Promise<ItemAvailability[]> {
+  const cutoff = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  const { data, error } = await supabase
+    .from('v_item_availability')
+    .select('*')
+    .eq('active', true)
+    .not('expiry_date', 'is', null)
+    .lte('expiry_date', cutoff)
+    .order('expiry_date', { ascending: true })
+
+  if (error) throw error
+  return (data ?? []) as ItemAvailability[]
+}
+
 /**
  * Every stock action with who did it, newest first. Paged rather than
  * loaded in full — a busy bar generates a transaction every few minutes

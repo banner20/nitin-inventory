@@ -72,10 +72,12 @@ export interface NewItemInput {
   /** How many base units in one pack. Omit or 1 for a loose (unpacked) item. */
   packSize?: number
   packLabel?: string | null
+  /** Null clears it, undefined leaves it unchanged (only matters for update). */
+  expiryDate?: string | null
 }
 
 const ITEM_COLUMNS =
-  'id, name, category_id, unit, sku, min_stock, aliases, photo_url, notes, active, kind, pack_size, pack_label'
+  'id, name, category_id, unit, sku, min_stock, aliases, photo_url, notes, active, kind, pack_size, pack_label, expiry_date'
 
 export async function createItem(input: NewItemInput): Promise<Item> {
   const { data, error } = await supabase
@@ -90,6 +92,7 @@ export async function createItem(input: NewItemInput): Promise<Item> {
       kind: input.kind,
       pack_size: input.packSize && input.packSize > 0 ? input.packSize : 1,
       pack_label: input.packLabel?.trim() || null,
+      expiry_date: input.expiryDate || null,
     })
     .select(ITEM_COLUMNS)
     .single()
@@ -114,8 +117,35 @@ export async function updateItem(id: string, patch: Partial<NewItemInput>): Prom
   if (patch.kind !== undefined) body.kind = patch.kind
   if (patch.packSize !== undefined) body.pack_size = patch.packSize > 0 ? patch.packSize : 1
   if (patch.packLabel !== undefined) body.pack_label = patch.packLabel?.trim() || null
+  if (patch.expiryDate !== undefined) body.expiry_date = patch.expiryDate || null
 
   const { error } = await supabase.from('items').update(body).eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
+/**
+ * Replaces an item's extra pack sizes wholesale — the simplest correct
+ * behaviour for something edited a handful of times, ever, rather than
+ * trying to diff a two- or three-row list.
+ */
+export async function setItemPacks(
+  itemId: string,
+  packs: { packSize: number; packLabel: string }[],
+): Promise<void> {
+  const { error: delErr } = await supabase.from('item_packs').delete().eq('item_id', itemId)
+  if (delErr) throw new Error(delErr.message)
+
+  const rows = packs
+    .filter((p) => p.packLabel.trim() && p.packSize > 0)
+    .map((p, i) => ({
+      item_id: itemId,
+      pack_size: p.packSize,
+      pack_label: p.packLabel.trim(),
+      sort: i,
+    }))
+  if (rows.length === 0) return
+
+  const { error } = await supabase.from('item_packs').insert(rows)
   if (error) throw new Error(error.message)
 }
 
@@ -177,6 +207,24 @@ export interface ImportRow {
   sku?: string
   min_stock?: string
   aliases?: string
+  /** Extra pack sizes beyond the default, semicolon separated, each "size:label" — same convention as aliases. */
+  alt_packs?: string
+  /** ISO date (YYYY-MM-DD). */
+  expiry_date?: string
+}
+
+/** Parses "250:bottle;1000:jug" into pack rows; silently drops malformed entries. */
+function parseAltPacks(raw?: string): { packSize: number; packLabel: string }[] {
+  if (!raw?.trim()) return []
+  return raw
+    .split(';')
+    .map((part) => {
+      const [size, ...labelParts] = part.split(':')
+      const packSize = Number(size?.trim())
+      const packLabel = labelParts.join(':').trim()
+      return { packSize, packLabel }
+    })
+    .filter((p) => p.packSize > 0 && p.packLabel)
 }
 
 export interface ImportPlanLine {
@@ -212,6 +260,15 @@ export function planImport(
     const kind = row.kind?.trim().toLowerCase()
     if (kind && kind !== 'returnable' && kind !== 'consumable') {
       errors.push('Kind must be "returnable" or "consumable"')
+    }
+
+    const expiry = row.expiry_date?.trim()
+    if (expiry && Number.isNaN(Date.parse(expiry))) {
+      errors.push('Expiry date must look like YYYY-MM-DD')
+    }
+
+    if (row.alt_packs?.trim() && parseAltPacks(row.alt_packs).length === 0) {
+      errors.push('Alt packs must look like "250:bottle;1000:jug"')
     }
 
     const existing = name ? byName.get(name.toLowerCase()) : undefined
@@ -298,17 +355,29 @@ export async function runImport(
       kind,
       pack_size: packSize,
       pack_label: r.pack_label?.trim() || null,
+      expiry_date: r.expiry_date?.trim() || null,
     }
   }
 
-  const toCreate = validLines.filter((l) => l.action === 'create').map(toPayload)
+  const toCreateLines = validLines.filter((l) => l.action === 'create')
   const toUpdate = validLines.filter((l) => l.action === 'update')
 
   let created = 0
-  if (toCreate.length > 0) {
-    const { data, error } = await supabase.from('items').insert(toCreate).select('id')
+  if (toCreateLines.length > 0) {
+    const { data, error } = await supabase
+      .from('items')
+      .insert(toCreateLines.map(toPayload))
+      .select('id')
     if (error) throw new Error(error.message)
     created = data?.length ?? 0
+
+    // Postgres preserves row order for a single multi-row insert, so this
+    // lines back up with toCreateLines by index.
+    const paired = (data ?? []).map((row, i) => ({ row, line: toCreateLines[i] }))
+    await withConcurrency(paired, 5, async ({ row, line }) => {
+      const packs = parseAltPacks(line?.row.alt_packs)
+      if (packs.length > 0) await setItemPacks(row.id, packs)
+    })
   }
 
   let updated = 0
@@ -317,7 +386,11 @@ export async function runImport(
       .from('items')
       .update(toPayload(line))
       .eq('id', line.existingId!)
-    if (!error) updated++
+    if (!error) {
+      updated++
+      const packs = parseAltPacks(line.row.alt_packs)
+      if (packs.length > 0) await setItemPacks(line.existingId!, packs)
+    }
   })
 
   return { created, updated, categoriesCreated, skipped }

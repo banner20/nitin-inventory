@@ -8,7 +8,8 @@ import { postTxn, type PostLine } from '@/lib/txns'
 import {
   AmountInput,
   amountToBase,
-  usesPacks,
+  defaultMode,
+  packOptions,
   type AmountMode,
 } from '@/components/AmountInput'
 import { formatPacks, type LineCondition, type OpenBalance } from '@/lib/types'
@@ -42,8 +43,11 @@ function toBase(row: Row): number {
   return amountToBase(row.back, row.mode, row.bal)
 }
 
+/** Outstanding amount in terms of the item's default pack, for the "All
+ * back" quick-fill — an alt pack size is a less common way to return it. */
 function packsOut(b: OpenBalance): number {
-  return usesPacks(b) ? Number(b.outstanding) / Number(b.pack_size) : Number(b.outstanding)
+  const primary = packOptions(b)[0]
+  return primary ? Number(b.outstanding) / primary.size : Number(b.outstanding)
 }
 
 /** The reason that needs no explanation, given what the thing is. */
@@ -90,7 +94,7 @@ export default function BringBack() {
       (byEvent.get(eventId) ?? []).map((bal) => ({
         bal,
         back: bal.kind === 'returnable' ? String(Number(packsOut(bal).toFixed(3))) : '0',
-        mode: usesPacks(bal) ? 'pack' : 'base',
+        mode: defaultMode(bal),
         reason: defaultReason(bal),
         issueOpen: false,
       })),
@@ -195,7 +199,7 @@ export default function BringBack() {
           setRows((rs) =>
             rs.map((r) => ({
               ...r,
-              mode: usesPacks(r.bal) ? 'pack' : 'base',
+              mode: defaultMode(r.bal),
               back: String(Number(packsOut(r.bal).toFixed(3))),
             })),
           )
@@ -234,7 +238,7 @@ export default function BringBack() {
                   )}
                   onClick={() =>
                     patch(idx, {
-                      mode: usesPacks(row.bal) ? 'pack' : 'base',
+                      mode: defaultMode(row.bal),
                       back: String(Number(packsOut(row.bal).toFixed(3))),
                     })
                   }
