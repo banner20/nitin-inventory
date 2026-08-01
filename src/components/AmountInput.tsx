@@ -22,6 +22,17 @@ export type AmountMode = string
 
 const BASE = 'base'
 
+/** "750ml" or "1.5L" — the size on the pill, so two pack options that
+ * happen to share a label word (two sizes both called "bottle") still read
+ * as different things. */
+function formatSize(size: number, unit: string): string {
+  if (unit === 'ml' && size >= 1000) {
+    const litres = size / 1000
+    return `${litres % 1 === 0 ? litres : litres.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')}L`
+  }
+  return `${size}${unit}`
+}
+
 /** Every way this item can be counted: its default pack, then any extras. */
 export function packOptions(item: PackItem): PackOption[] {
   const opts: PackOption[] = []
@@ -109,6 +120,43 @@ export function AmountInput({
   return (
     <div className="space-y-1.5">
       <div className="flex items-center gap-2 flex-wrap">
+        {options.length > 0 ? (
+          <div
+            className="inline-flex rounded-lg border border-ink-700 overflow-hidden flex-wrap"
+            role="group"
+            aria-label="Size"
+          >
+            {options.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                onClick={() => switchMode(o.id)}
+                className={clsx(
+                  'px-3 py-1.5 min-h-11 text-sm font-medium transition-colors whitespace-nowrap leading-tight',
+                  mode === o.id
+                    ? 'bg-brand-500 text-ink-950'
+                    : 'text-ink-400 hover:text-ink-200',
+                )}
+              >
+                <span className="block">{formatSize(o.size, item.unit)}</span>
+                <span className="block text-[10px] opacity-80">{o.label}s</span>
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => switchMode(BASE)}
+              className={clsx(
+                'px-3 min-h-11 text-sm font-medium transition-colors',
+                mode === BASE ? 'bg-brand-500 text-ink-950' : 'text-ink-400 hover:text-ink-200',
+              )}
+            >
+              {item.unit}
+            </button>
+          </div>
+        ) : (
+          <span className="text-sm text-ink-400">{item.unit}</span>
+        )}
+
         {withSteppers && (
           <button
             type="button"
@@ -140,42 +188,6 @@ export function AmountInput({
           >
             +
           </button>
-        )}
-
-        {options.length > 0 ? (
-          <div
-            className="inline-flex rounded-lg border border-ink-700 overflow-hidden flex-wrap"
-            role="group"
-            aria-label="Unit"
-          >
-            {options.map((o) => (
-              <button
-                key={o.id}
-                type="button"
-                onClick={() => switchMode(o.id)}
-                className={clsx(
-                  'px-3 h-11 text-sm font-medium transition-colors whitespace-nowrap',
-                  mode === o.id
-                    ? 'bg-brand-500 text-ink-950'
-                    : 'text-ink-400 hover:text-ink-200',
-                )}
-              >
-                {o.label}s
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => switchMode(BASE)}
-              className={clsx(
-                'px-3 h-11 text-sm font-medium transition-colors',
-                mode === BASE ? 'bg-brand-500 text-ink-950' : 'text-ink-400 hover:text-ink-200',
-              )}
-            >
-              {item.unit}
-            </button>
-          </div>
-        ) : (
-          <span className="text-sm text-ink-400">{item.unit}</span>
         )}
       </div>
 

@@ -23,6 +23,7 @@ export default function MasterSheet() {
   const [sort, setSort] = useState<SortKey>('name')
   const [adding, setAdding] = useState(false)
   const [importing, setImporting] = useState(false)
+  const [editing, setEditing] = useState<ItemAvailability | null>(null)
 
   const rows = useMemo(() => {
     let list = items.data ?? []
@@ -99,6 +100,18 @@ export default function MasterSheet() {
         />
       )}
 
+      {editing && (
+        <ItemForm
+          categories={cats.data ?? []}
+          editItem={editing}
+          onCreated={() => {
+            setEditing(null)
+            items.reload()
+          }}
+          onCancel={() => setEditing(null)}
+        />
+      )}
+
       <div className="flex flex-wrap gap-2">
         <input
           className="input w-auto flex-1 min-w-56"
@@ -166,11 +179,12 @@ export default function MasterSheet() {
                 <th className="p-3 font-medium text-right">Quarantine</th>
                 <th className="p-3 font-medium text-right">Available</th>
                 <th className="p-3 font-medium text-right">Min</th>
+                <th className="p-3 font-medium text-right"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-ink-800">
               {rows.map((r) => (
-                <Row key={r.item_id} row={r} />
+                <Row key={r.item_id} row={r} onEdit={() => setEditing(r)} />
               ))}
             </tbody>
           </table>
@@ -189,7 +203,7 @@ function expiryStatus(dateStr: string): 'expired' | 'soon' | null {
   return null
 }
 
-function Row({ row }: { row: ItemAvailability }) {
+function Row({ row, onEdit }: { row: ItemAvailability; onEdit: () => void }) {
   const status = row.expiry_date ? expiryStatus(row.expiry_date) : null
 
   return (
@@ -269,6 +283,11 @@ function Row({ row }: { row: ItemAvailability }) {
       </td>
       <td className="p-3 text-right tabular text-ink-600">
         {Number(row.min_stock) ? formatPacks(row.min_stock, row) : ''}
+      </td>
+      <td className="p-3 text-right">
+        <button className="btn btn-ghost h-8 min-h-8 text-xs px-2.5" onClick={onEdit}>
+          Edit
+        </button>
       </td>
     </tr>
   )

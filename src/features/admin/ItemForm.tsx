@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
-import { createItem, findSimilarItems, setItemPacks } from '@/lib/txns'
-import type { Category, Item, ItemKind } from '@/lib/types'
+import { createItem, findSimilarItems, setItemPacks, updateItem } from '@/lib/txns'
+import type { Category, Item, ItemAvailability, ItemKind } from '@/lib/types'
 
 interface AltPackDraft {
   packSize: string
@@ -8,41 +8,53 @@ interface AltPackDraft {
 }
 
 /**
- * Add-an-item, factored out so it behaves identically wherever it appears —
- * the master sheet's own "Add item" button, and Stock In's "this doesn't
- * exist yet" path. One form, one set of rules, one place to fix a bug.
+ * Add-or-edit an item, factored out so it behaves identically wherever it
+ * appears — the master sheet's own "Add item" button, its per-row "Edit",
+ * and Stock In's "this doesn't exist yet" path. One form, one set of rules,
+ * one place to fix a bug.
  */
 export default function ItemForm({
   categories,
   initialName = '',
-  submitLabel = 'Add item',
+  submitLabel,
+  editItem,
   onCreated,
   onCancel,
 }: {
   categories: Category[]
   initialName?: string
   submitLabel?: string
+  /** Pass an existing item to edit it in place instead of creating a new one. */
+  editItem?: ItemAvailability
   onCreated: (item: Item) => void
   onCancel?: () => void
 }) {
-  const [name, setName] = useState(initialName)
-  const [categoryId, setCategoryId] = useState('')
-  const [kind, setKind] = useState<ItemKind>('consumable')
-  const [unit, setUnit] = useState('ml')
-  const [packSize, setPackSize] = useState('')
-  const [packLabel, setPackLabel] = useState('')
-  const [sku, setSku] = useState('')
-  const [minStock, setMinStock] = useState('0')
-  const [aliases, setAliases] = useState('')
-  const [expiryDate, setExpiryDate] = useState('')
-  const [altPacks, setAltPacks] = useState<AltPackDraft[]>([])
+  const isEditing = !!editItem
+  const [name, setName] = useState(editItem?.name ?? initialName)
+  const [categoryId, setCategoryId] = useState(editItem?.category_id ?? '')
+  const [kind, setKind] = useState<ItemKind>(editItem?.kind ?? 'consumable')
+  const [unit, setUnit] = useState(editItem?.unit ?? 'ml')
+  const [packSize, setPackSize] = useState(
+    editItem?.pack_size && Number(editItem.pack_size) > 1 ? String(editItem.pack_size) : '',
+  )
+  const [packLabel, setPackLabel] = useState(editItem?.pack_label ?? '')
+  const [sku, setSku] = useState(editItem?.sku ?? '')
+  const [minStock, setMinStock] = useState(String(editItem?.min_stock ?? 0))
+  const [aliases, setAliases] = useState((editItem?.aliases ?? []).join(', '))
+  const [expiryDate, setExpiryDate] = useState(editItem?.expiry_date ?? '')
+  const [altPacks, setAltPacks] = useState<AltPackDraft[]>(
+    (editItem?.alt_packs ?? []).map((p) => ({
+      packSize: String(p.pack_size),
+      packLabel: p.pack_label,
+    })),
+  )
   const [similar, setSimilar] = useState<{ id: string; name: string }[]>([])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   async function checkDuplicates(value: string) {
     setName(value)
-    setSimilar(await findSimilarItems(value))
+    if (!isEditing) setSimilar(await findSimilarItems(value))
   }
 
   async function onSubmit(e: FormEvent) {
@@ -50,7 +62,8 @@ export default function ItemForm({
     setBusy(true)
     setError(null)
     try {
-      const item = await createItem({
+      const validAltPacks = altPacks.filter((p) => p.packSize && p.packLabel.trim())
+      const input = {
         name,
         categoryId: categoryId || null,
         unit,
@@ -64,19 +77,24 @@ export default function ItemForm({
           .split(',')
           .map((a) => a.trim())
           .filter(Boolean),
-      })
-
-      const validAltPacks = altPacks.filter((p) => p.packSize && p.packLabel.trim())
-      if (validAltPacks.length > 0) {
-        await setItemPacks(
-          item.id,
-          validAltPacks.map((p) => ({ packSize: Number(p.packSize), packLabel: p.packLabel })),
-        )
       }
+
+      let item: Item
+      if (isEditing) {
+        await updateItem(editItem.item_id, input)
+        item = { ...editItem, ...input, id: editItem.item_id } as unknown as Item
+      } else {
+        item = await createItem(input)
+      }
+
+      await setItemPacks(
+        isEditing ? editItem.item_id : item.id,
+        validAltPacks.map((p) => ({ packSize: Number(p.packSize), packLabel: p.packLabel })),
+      )
 
       onCreated(item)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not add the item.')
+      setError(err instanceof Error ? err.message : 'Could not save the item.')
     } finally {
       setBusy(false)
     }
@@ -300,7 +318,11 @@ export default function ItemForm({
 
       <div className="flex gap-2">
         <button type="submit" className="btn btn-primary" disabled={busy || !name.trim()}>
-          {busy ? 'Adding…' : submitLabel}
+          {busy
+            ? isEditing
+              ? 'Saving…'
+              : 'Adding…'
+            : (submitLabel ?? (isEditing ? 'Save changes' : 'Add item'))}
         </button>
         {onCancel && (
           <button type="button" className="btn btn-ghost" onClick={onCancel} disabled={busy}>
