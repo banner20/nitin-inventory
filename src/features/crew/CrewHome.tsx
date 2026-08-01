@@ -1,22 +1,16 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useAuth } from '@/features/auth/AuthProvider'
 import { useAsync } from '@/lib/useAsync'
-import { fetchMyOpenBalances } from '@/lib/queries'
+import { fetchAllOpenBalances } from '@/lib/queries'
 import { IconIn, IconOut } from '@/components/icons'
 import { formatPacks, type OpenBalance } from '@/lib/types'
 
 /**
- * "What am I still holding?" — the question the whole app exists to answer,
- * so it is the first thing on the screen.
+ * "What's checked out right now?" — everyone's, not just yours. Nothing
+ * about who has the company's gear is hidden from anyone on the crew.
  */
 export default function CrewHome() {
-  const { profile } = useAuth()
-  const personId = profile?.id
-  const { data, error, loading } = useAsync(
-    () => (personId ? fetchMyOpenBalances(personId) : Promise.resolve([])),
-    [personId],
-  )
+  const { data, error, loading } = useAsync(fetchAllOpenBalances, [])
 
   const balances = data ?? []
   // Count distinct things, not quantities: adding 3000 ml of gin to 5 limes
@@ -56,7 +50,7 @@ export default function CrewHome() {
 
       <section className="space-y-3">
         <div className="flex items-baseline justify-between">
-          <h2 className="font-semibold text-white">With you right now</h2>
+          <h2 className="font-semibold text-white">Checked out right now</h2>
           {!loading && (
             <span className="text-sm text-ink-400 tabular">
               {totalItems} item{totalItems === 1 ? '' : 's'}
@@ -68,15 +62,13 @@ export default function CrewHome() {
 
         {error && (
           <p className="text-sm text-bad-500">
-            Couldn’t load your items. {error.message}
+            Couldn’t load open items. {error.message}
           </p>
         )}
 
         {!loading && !error && balances.length === 0 && (
           <div className="card p-5 text-center">
-            <p className="text-sm text-ink-400">
-              Nothing signed out to you. You’re all clear.
-            </p>
+            <p className="text-sm text-ink-400">Nothing checked out right now.</p>
           </div>
         )}
 
@@ -90,6 +82,10 @@ export default function CrewHome() {
         {events.map(([eventId, lines]) => (
           <EventGroup key={eventId} lines={lines} />
         ))}
+
+        <Link to="/history" className="block text-center text-sm text-brand-400 underline py-2">
+          See full history — everything checked out and checked in
+        </Link>
       </section>
     </div>
   )
@@ -136,8 +132,14 @@ function EventGroup({ lines }: { lines: OpenBalance[] }) {
       {open && (
         <ul className="divide-y divide-ink-800 border-t border-ink-800">
           {lines.map((line) => (
-            <li key={line.item_id} className="px-3 py-2 flex justify-between gap-3 text-sm">
-              <span className="text-ink-200 truncate">{line.item_name}</span>
+            <li
+              key={`${line.item_id}-${line.person_id}`}
+              className="px-3 py-2 flex items-center justify-between gap-3 text-sm"
+            >
+              <div className="min-w-0">
+                <p className="text-ink-200 truncate">{line.item_name}</p>
+                <p className="text-xs text-ink-600 truncate">{line.person_name}</p>
+              </div>
               <span
                 className="tabular text-ink-400 shrink-0"
                 title={`${line.outstanding} ${line.unit}`}

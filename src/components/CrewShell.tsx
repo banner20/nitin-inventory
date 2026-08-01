@@ -1,13 +1,12 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import clsx from 'clsx'
 import { useAuth } from '@/features/auth/AuthProvider'
-import { IconHome, IconIn, IconOut, IconUser, IconUsers } from './icons'
+import { IconHome, IconIn, IconOut, IconUser } from './icons'
 
 const tabs = [
   { to: '/', label: 'Home', Icon: IconHome, end: true },
   { to: '/out', label: 'Take out', Icon: IconOut, end: false },
   { to: '/in', label: 'Bring back', Icon: IconIn, end: false },
-  { to: '/everyone', label: 'Everyone', Icon: IconUsers, end: false },
   { to: '/me', label: 'Me', Icon: IconUser, end: false },
 ]
 
@@ -41,7 +40,7 @@ export default function CrewShell() {
       </main>
 
       <nav className="fixed bottom-0 inset-x-0 bg-ink-900/95 backdrop-blur border-t border-ink-800">
-        <ul className="grid grid-cols-5 pb-[env(safe-area-inset-bottom)]">
+        <ul className="grid grid-cols-4 pb-[env(safe-area-inset-bottom)]">
           {tabs.map(({ to, label, Icon, end }) => (
             <li key={to}>
               <NavLink

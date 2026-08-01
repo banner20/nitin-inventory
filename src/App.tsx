@@ -7,7 +7,6 @@ import CrewShell from '@/components/CrewShell'
 import AdminShell from '@/components/AdminShell'
 import LoginScreen from '@/features/auth/LoginScreen'
 import CrewHome from '@/features/crew/CrewHome'
-import Everyone from '@/features/crew/Everyone'
 import Me from '@/features/crew/Me'
 import TakeOut from '@/features/crew/TakeOut'
 import BringBack from '@/features/crew/BringBack'
@@ -35,7 +34,7 @@ function Routing() {
           <Route index element={<CrewHome />} />
           <Route path="out" element={<TakeOut />} />
           <Route path="in" element={<BringBack />} />
-          <Route path="everyone" element={<Everyone />} />
+          <Route path="history" element={<History />} />
           <Route path="me" element={<Me />} />
         </Route>
 
