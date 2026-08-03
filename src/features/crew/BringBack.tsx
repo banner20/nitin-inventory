@@ -33,15 +33,27 @@ const ISSUE_LABEL: Record<LineCondition, string> = {
 
 interface Row {
   bal: OpenBalance
-  back: string
-  mode: AmountMode
+  /** Whole sealed packs coming back — posts as 'ok'. */
+  sealedBack: string
+  sealedMode: AmountMode
+  /** However much is left in an opened bottle — posts as 'loose', separate
+   * from sealedBack rather than inferred from it, so it's never a guess. */
+  looseBack: string
   reason: LineCondition
   /** Whether this line's reason picker has been opened. */
   issueOpen: boolean
 }
 
+function sealedBase(row: Row): number {
+  return amountToBase(row.sealedBack, row.sealedMode, row.bal)
+}
+
+function looseBase(row: Row): number {
+  return Number(row.looseBack) || 0
+}
+
 function toBase(row: Row): number {
-  return amountToBase(row.back, row.mode, row.bal)
+  return sealedBase(row) + looseBase(row)
 }
 
 /** Outstanding amount in terms of the item's default pack, for the "All
@@ -54,25 +66,6 @@ function packsOut(b: OpenBalance): number {
 /** The reason that needs no explanation, given what the thing is. */
 function defaultReason(b: OpenBalance): LineCondition {
   return b.kind === 'returnable' ? 'lost' : 'consumed'
-}
-
-/**
- * However much is physically coming back, split into whole sealed packs and
- * whatever's left over. A bottle that's only part-used isn't a fresh pack any
- * more — the leftover posts as 'loose' so the master sheet can tell "3 sealed
- * bottles" apart from "1 open bottle with some left," which is exactly the
- * distinction that matters for reordering and for the books.
- */
-function splitSealedLoose(row: Row, backBase: number): { sealed: number; loose: number } {
-  if (row.bal.kind !== 'consumable' || backBase <= 0) return { sealed: backBase, loose: 0 }
-
-  const opt = row.mode === 'base' ? undefined : packOptions(row.bal).find((o) => o.id === row.mode)
-  if (!opt) return { sealed: 0, loose: backBase }
-
-  const wholePacks = Math.floor(backBase / opt.size + 1e-9)
-  const sealed = Number((wholePacks * opt.size).toFixed(3))
-  const loose = Number((backBase - sealed).toFixed(3))
-  return { sealed, loose }
 }
 
 /**
@@ -113,8 +106,9 @@ export default function BringBack() {
     setRows(
       (byEvent.get(eventId) ?? []).map((bal) => ({
         bal,
-        back: bal.kind === 'returnable' ? String(Number(packsOut(bal).toFixed(3))) : '0',
-        mode: defaultMode(bal),
+        sealedBack: bal.kind === 'returnable' ? String(Number(packsOut(bal).toFixed(3))) : '0',
+        sealedMode: defaultMode(bal),
+        looseBack: '0',
         reason: defaultReason(bal),
         issueOpen: false,
       })),
@@ -137,9 +131,13 @@ export default function BringBack() {
     try {
       const lines: PostLine[] = []
       for (const row of rows) {
-        const back = Math.min(toBase(row), Number(row.bal.outstanding))
-        const gap = Number(row.bal.outstanding) - back
-        const { sealed, loose } = splitSealedLoose(row, back)
+        const total = Math.min(toBase(row), Number(row.bal.outstanding))
+        const gap = Number(row.bal.outstanding) - total
+        // Sealed and loose are capped together at what's outstanding, sealed
+        // taking priority — if someone overstates either, the loose figure
+        // gives way first since it's the softer of the two claims.
+        const sealed = Math.min(sealedBase(row), total)
+        const loose = Math.max(0, total - sealed)
         if (sealed > 0) lines.push({ item_id: row.bal.item_id, qty: sealed, condition: 'ok' })
         if (loose > 0) lines.push({ item_id: row.bal.item_id, qty: loose, condition: 'loose' })
         if (gap > 0) lines.push({ item_id: row.bal.item_id, qty: gap, condition: row.reason })
@@ -221,8 +219,9 @@ export default function BringBack() {
           setRows((rs) =>
             rs.map((r) => ({
               ...r,
-              mode: defaultMode(r.bal),
-              back: String(Number(packsOut(r.bal).toFixed(3))),
+              sealedMode: defaultMode(r.bal),
+              sealedBack: String(Number(packsOut(r.bal).toFixed(3))),
+              looseBack: '0',
             })),
           )
         }
@@ -237,6 +236,8 @@ export default function BringBack() {
           const gap = out - back
           const over = toBase(row) > out
           const flagged = gap > 0 && row.reason !== 'consumed'
+          const sealed = Math.min(sealedBase(row), back)
+          const loose = Math.max(0, back - sealed)
 
           return (
             <li
@@ -260,8 +261,9 @@ export default function BringBack() {
                   )}
                   onClick={() =>
                     patch(idx, {
-                      mode: defaultMode(row.bal),
-                      back: String(Number(packsOut(row.bal).toFixed(3))),
+                      sealedMode: defaultMode(row.bal),
+                      sealedBack: String(Number(packsOut(row.bal).toFixed(3))),
+                      looseBack: '0',
                     })
                   }
                 >
@@ -269,22 +271,43 @@ export default function BringBack() {
                 </button>
                 <button
                   className={clsx('btn', back === 0 ? 'btn-primary' : 'btn-ghost')}
-                  onClick={() => patch(idx, { back: '0' })}
+                  onClick={() => patch(idx, { sealedBack: '0', looseBack: '0' })}
                 >
                   {row.bal.kind === 'returnable' ? 'None back' : 'All used'}
                 </button>
               </div>
 
               <div className="space-y-1">
-                <span className="text-xs text-ink-400">Or enter the amount</span>
+                <span className="text-xs text-ink-400">Sealed, unopened</span>
                 <AmountInput
                   item={row.bal}
-                  amount={row.back}
-                  mode={row.mode}
-                  ariaLabel={`Amount of ${row.bal.item_name} coming back`}
-                  onChange={(back, mode) => patch(idx, { back, mode })}
+                  amount={row.sealedBack}
+                  mode={row.sealedMode}
+                  ariaLabel={`Sealed ${row.bal.item_name} coming back`}
+                  onChange={(sealedBack, sealedMode) => patch(idx, { sealedBack, sealedMode })}
                 />
               </div>
+
+              {row.bal.kind === 'consumable' && (
+                <div className="space-y-1">
+                  <span className="text-xs text-ink-400">
+                    Opened, with some left (exact amount)
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <input
+                      className="input tabular text-center w-24"
+                      type="number"
+                      min={0}
+                      step="any"
+                      inputMode="decimal"
+                      value={row.looseBack}
+                      onChange={(e) => patch(idx, { looseBack: e.target.value })}
+                      aria-label={`Opened, partial amount of ${row.bal.item_name} coming back`}
+                    />
+                    <span className="text-sm text-ink-400">{row.bal.unit}</span>
+                  </div>
+                </div>
+              )}
 
               {over && (
                 <p className="text-xs text-warn-500">
@@ -292,18 +315,14 @@ export default function BringBack() {
                 </p>
               )}
 
-              {(() => {
-                const { sealed, loose } = splitSealedLoose(row, back)
-                if (loose <= 0) return null
-                return (
-                  <p className="text-xs text-ink-400">
-                    {sealed > 0 && <>{formatPacks(sealed, row.bal)} sealed · </>}
-                    <span className="text-warn-500">
-                      {formatPacks(loose, row.bal)} opened, not a full pack
-                    </span>
-                  </p>
-                )
-              })()}
+              {loose > 0 && (
+                <p className="text-xs text-ink-400">
+                  {sealed > 0 && <>{formatPacks(sealed, row.bal)} sealed · </>}
+                  <span className="text-warn-500">
+                    {formatPacks(loose, row.bal)} opened, not a full pack
+                  </span>
+                </p>
+              )}
 
               {gap > 0 &&
                 (row.issueOpen ? (

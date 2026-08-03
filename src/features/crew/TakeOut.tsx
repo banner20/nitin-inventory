@@ -22,13 +22,22 @@ interface BasketRow {
   item: ItemAvailability
   amount: string
   mode: AmountMode
-  /** Drawing from this item's already-opened bottle instead of a fresh sealed
-   * pack — an accounting distinction, not just a UI convenience. */
-  fromLoose: boolean
+  /** Separate from `amount` — drawn from the item's already-opened bottle
+   * rather than a fresh sealed pack, so both can be taken in the same line-up
+   * (e.g. two full bottles plus what's left in the one already open). */
+  looseAmount: string
+}
+
+function sealedBase(row: BasketRow): number {
+  return amountToBase(row.amount, row.mode, row.item)
+}
+
+function looseBase(row: BasketRow): number {
+  return Number(row.looseAmount) || 0
 }
 
 function toBase(row: BasketRow): number {
-  return amountToBase(row.amount, row.mode, row.item)
+  return sealedBase(row) + looseBase(row)
 }
 
 /**
@@ -67,9 +76,13 @@ export default function TakeOut() {
     setBusy(true)
     setError(null)
     try {
-      const lines: PostLine[] = basket
-        .filter((b) => toBase(b) > 0)
-        .map((b) => ({ item_id: b.item.item_id, qty: toBase(b), from_loose: b.fromLoose || undefined }))
+      const lines: PostLine[] = []
+      for (const b of basket) {
+        const sealed = sealedBase(b)
+        const loose = looseBase(b)
+        if (sealed > 0) lines.push({ item_id: b.item.item_id, qty: sealed })
+        if (loose > 0) lines.push({ item_id: b.item.item_id, qty: loose, from_loose: true })
+      }
 
       if (lines.length === 0) throw new Error('Add something first.')
 
@@ -127,7 +140,7 @@ export default function TakeOut() {
               <button
                 className="w-full text-left px-3 py-3 hover:bg-ink-850 flex justify-between gap-3 items-center"
                 onClick={() => {
-                  setBasket((b) => [...b, { item: m, amount: '1', mode: defaultMode(m), fromLoose: false }])
+                  setBasket((b) => [...b, { item: m, amount: '1', mode: defaultMode(m), looseAmount: '' }])
                   setQ('')
                 }}
               >
@@ -176,37 +189,46 @@ export default function TakeOut() {
                   </button>
                 </div>
 
-                <AmountInput
-                  item={row.item}
-                  amount={row.amount}
-                  mode={row.mode}
-                  withSteppers
-                  ariaLabel={`Quantity of ${row.item.name}`}
-                  onChange={(amount, mode) => patch(row.item.item_id, { amount, mode })}
-                />
+                <div className="space-y-1">
+                  <span className="text-xs text-ink-400">Full bottles</span>
+                  <AmountInput
+                    item={row.item}
+                    amount={row.amount}
+                    mode={row.mode}
+                    withSteppers
+                    ariaLabel={`Full bottles of ${row.item.name}`}
+                    onChange={(amount, mode) => patch(row.item.item_id, { amount, mode })}
+                  />
+                </div>
 
                 {Number(row.item.qty_loose) > 0 && (
-                  <label className="flex items-center gap-2 text-xs text-ink-400">
-                    <input
-                      type="checkbox"
-                      checked={row.fromLoose}
-                      onChange={(e) => {
-                        const checked = e.target.checked
-                        patch(row.item.item_id, {
-                          fromLoose: checked,
-                          mode: checked ? 'base' : defaultMode(row.item),
-                          amount: checked
-                            ? String(
-                                Math.min(Number(row.amount) || 0, Number(row.item.qty_loose)) ||
-                                  Number(row.item.qty_loose),
-                              )
-                            : row.amount,
-                        })
-                      }}
-                    />
-                    From the opened bottle ({formatPacks(row.item.qty_loose, row.item)} left) instead
-                    of a fresh one
-                  </label>
+                  <div className="space-y-1">
+                    <span className="text-xs text-ink-400">
+                      Plus from the opened bottle ({formatPacks(row.item.qty_loose, row.item)} left)
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <input
+                        className="input tabular text-center w-24"
+                        type="number"
+                        min={0}
+                        max={Number(row.item.qty_loose)}
+                        step="any"
+                        inputMode="decimal"
+                        value={row.looseAmount}
+                        onChange={(e) => {
+                          const capped = Math.min(
+                            Number(e.target.value) || 0,
+                            Number(row.item.qty_loose),
+                          )
+                          patch(row.item.item_id, {
+                            looseAmount: e.target.value === '' ? '' : String(capped),
+                          })
+                        }}
+                        aria-label={`Amount of ${row.item.name} from the opened bottle`}
+                      />
+                      <span className="text-sm text-ink-400">{row.item.unit}</span>
+                    </div>
+                  </div>
                 )}
 
                 {short && (
