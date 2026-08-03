@@ -115,7 +115,7 @@ export interface VoiceUnmatched {
  * toward whichever names happen to fit rather than none of them. */
 export function buildVoiceVocabulary(items: ItemAvailability[]): string {
   const names = items.flatMap((i) => [i.name, ...i.aliases])
-  return names.join(', ').slice(0, 900)
+  return names.join(', ').slice(0, 896)
 }
 
 function levenshtein(a: string, b: string): number {

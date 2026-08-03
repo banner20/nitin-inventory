@@ -39,10 +39,10 @@ export default async function handler(request: Request): Promise<Response> {
   form.append('model', 'whisper-large-v3-turbo')
   form.append('response_format', 'json')
   if (typeof vocabulary === 'string' && vocabulary.trim()) {
-    // Whisper's prompt caps out around 224 tokens and silently truncates
-    // past that — cut to a safe character budget rather than let the API
-    // reject or mangle an oversized prompt.
-    form.append('prompt', vocabulary.slice(0, 900))
+    // Groq rejects anything over 896 characters outright (not a silent
+    // truncation) — confirmed by an actual "prompt length must be 896
+    // characters or fewer" error, so this cap is exact, not a guess.
+    form.append('prompt', vocabulary.slice(0, 896))
   }
 
   const groqRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
