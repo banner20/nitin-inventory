@@ -55,7 +55,10 @@ export function useVoiceRecorder() {
       if (vocabulary) form.append('vocabulary', vocabulary)
       const res = await fetch('/api/transcribe', { method: 'POST', body: form })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Could not transcribe that.')
+      if (!res.ok) {
+        const detail = typeof data.detail === 'string' ? data.detail.slice(0, 300) : null
+        throw new Error([data.error ?? 'Could not transcribe that.', detail].filter(Boolean).join(' — '))
+      }
       return (data.text as string) ?? ''
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Voice input failed.')
