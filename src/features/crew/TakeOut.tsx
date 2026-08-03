@@ -18,6 +18,7 @@ import {
   type EventRecord,
   type ItemAvailability,
 } from '@/lib/types'
+import { parseVoiceTranscript, useVoiceRecorder } from '@/lib/voice'
 
 interface BasketRow {
   item: ItemAvailability
@@ -59,6 +60,8 @@ export default function TakeOut() {
   const [error, setError] = useState<string | null>(null)
   const [quickAdding, setQuickAdding] = useState(false)
   const [quickAddError, setQuickAddError] = useState<string | null>(null)
+  const voice = useVoiceRecorder()
+  const [voiceResult, setVoiceResult] = useState<{ heard: string; unmatched: string[] } | null>(null)
 
   const chosen = new Set(basket.map((b) => b.item.item_id))
 
@@ -101,6 +104,31 @@ export default function TakeOut() {
     } finally {
       setQuickAdding(false)
     }
+  }
+
+  /** Stop recording, transcribe, and drop whatever was heard into the basket
+   * for review — quantities read back from natural speech are a best
+   * guess, not a submission, so nothing posts until the crew member checks it. */
+  async function handleVoiceStop() {
+    const text = await voice.stopAndTranscribe()
+    if (!text) return
+
+    const { matched, unmatched } = parseVoiceTranscript(text, items.data ?? [])
+    setBasket((b) => {
+      const next = [...b]
+      for (const m of matched) {
+        const existingIdx = next.findIndex((x) => x.item.item_id === m.item.item_id)
+        if (existingIdx >= 0) {
+          const existing = next[existingIdx]!
+          const currentQty = Number(existing.amount) || 0
+          next[existingIdx] = { ...existing, amount: String(currentQty + m.qty) }
+        } else {
+          next.push({ item: m.item, amount: String(m.qty), mode: defaultMode(m.item), looseAmount: '' })
+        }
+      }
+      return next
+    })
+    setVoiceResult({ heard: text, unmatched: unmatched.map((u) => u.heard) })
   }
 
   async function post() {
@@ -156,14 +184,59 @@ export default function TakeOut() {
         </button>
       </header>
 
-      <input
-        className="input"
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder="Search — gin, tonic, jigger…"
-        autoCorrect="off"
-        spellCheck={false}
-      />
+      <div className="flex items-center gap-2">
+        <input
+          className="input flex-1"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search — gin, tonic, jigger…"
+          autoCorrect="off"
+          spellCheck={false}
+        />
+        <button
+          type="button"
+          className={
+            'shrink-0 size-11 min-h-11 rounded-lg flex items-center justify-center transition-colors ' +
+            (voice.recording
+              ? 'bg-bad-500 text-white animate-pulse'
+              : 'btn btn-ghost px-0')
+          }
+          onClick={() => (voice.recording ? void handleVoiceStop() : void voice.start())}
+          disabled={voice.busy}
+          aria-label={voice.recording ? 'Stop listening' : 'Add items by voice'}
+          title={voice.recording ? 'Stop listening' : 'Add items by voice'}
+        >
+          {voice.busy ? (
+            <span className="text-xs">…</span>
+          ) : (
+            <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth={2}>
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8" strokeLinecap="round" />
+            </svg>
+          )}
+        </button>
+      </div>
+
+      {voice.error && <p className="text-sm text-bad-500">{voice.error}</p>}
+
+      {voiceResult && (
+        <div className="card p-3 space-y-1.5 text-sm">
+          <p className="text-ink-400">
+            Heard: <span className="text-ink-200">“{voiceResult.heard}”</span>
+          </p>
+          {voiceResult.unmatched.length > 0 && (
+            <p className="text-warn-500">
+              Couldn't match: {voiceResult.unmatched.join(', ')} — add these by search instead.
+            </p>
+          )}
+          <button
+            className="text-xs text-brand-400 underline"
+            onClick={() => setVoiceResult(null)}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {matches.length > 0 && (
         <ul className="card divide-y divide-ink-800">
