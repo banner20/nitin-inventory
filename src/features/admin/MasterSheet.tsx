@@ -176,7 +176,12 @@ export default function MasterSheet() {
                 <th className="p-3 font-medium">Item</th>
                 <th className="p-3 font-medium text-right">Owned</th>
                 <th className="p-3 font-medium text-right">Out</th>
-                <th className="p-3 font-medium text-right">Quarantine</th>
+                <th
+                  className="p-3 font-medium text-right"
+                  title="Came back broken — held here until it's repaired or written off, not counted as available."
+                >
+                  Damaged
+                </th>
                 <th className="p-3 font-medium text-right">Available</th>
                 <th className="p-3 font-medium text-right">Min</th>
                 <th className="p-3 font-medium text-right"></th>

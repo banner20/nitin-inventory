@@ -10,6 +10,7 @@ declare
   syrup_cat uuid := (select id from categories where name = 'Syrups & Sweeteners');
   pantry_cat uuid := (select id from categories where name = 'Pantry & Condiments');
   acid_cat uuid := (select id from categories where name = 'Acids & Mixology Chemicals');
+  bitters_cat uuid := (select id from categories where name = 'Liqueurs & Bitters');
   iid uuid;
   tid uuid;
 begin
@@ -1241,6 +1242,48 @@ begin
     insert into items (name, category_id, unit, kind, pack_size, pack_label, min_stock, expiry_date)
     values ('Xanthan Gum', acid_cat, 'g', 'consumable', 500, 'pack', 0, null)
     returning id into iid;
+  end if;
+
+  -- Bitters section, added in the "(1)" July update to the sheet. No ml size
+  -- given for these, so counted as whole bottles.
+  select id into iid from items where lower(name) = lower('Angostura Aromatic Bitters');
+  if iid is null then
+    insert into items (name, category_id, unit, kind, pack_size, pack_label, min_stock, expiry_date)
+    values ('Angostura Aromatic Bitters', bitters_cat, 'pcs', 'consumable', 1, 'bottle', 0, null)
+    returning id into iid;
+    insert into txns (client_uuid, type, created_by, status, source, occurred_at, note)
+    values (gen_random_uuid(), 'ADD', admin_id, 'posted', 'manual', now(), 'Initial stock-in from 30 Sixty inventory sheet (July update)') returning id into tid;
+    insert into txn_lines (txn_id, item_id, qty) values (tid, iid, 23);
+  end if;
+
+  select id into iid from items where lower(name) = lower('Angostura Cocoa Bitters');
+  if iid is null then
+    insert into items (name, category_id, unit, kind, pack_size, pack_label, min_stock, expiry_date)
+    values ('Angostura Cocoa Bitters', bitters_cat, 'pcs', 'consumable', 1, 'bottle', 0, null)
+    returning id into iid;
+    insert into txns (client_uuid, type, created_by, status, source, occurred_at, note)
+    values (gen_random_uuid(), 'ADD', admin_id, 'posted', 'manual', now(), 'Initial stock-in from 30 Sixty inventory sheet (July update)') returning id into tid;
+    insert into txn_lines (txn_id, item_id, qty) values (tid, iid, 8);
+  end if;
+
+  select id into iid from items where lower(name) = lower('Angostura Orange Bitters');
+  if iid is null then
+    insert into items (name, category_id, unit, kind, pack_size, pack_label, min_stock, expiry_date)
+    values ('Angostura Orange Bitters', bitters_cat, 'pcs', 'consumable', 1, 'bottle', 0, null)
+    returning id into iid;
+    insert into txns (client_uuid, type, created_by, status, source, occurred_at, note)
+    values (gen_random_uuid(), 'ADD', admin_id, 'posted', 'manual', now(), 'Initial stock-in from 30 Sixty inventory sheet (July update)') returning id into tid;
+    insert into txn_lines (txn_id, item_id, qty) values (tid, iid, 9);
+  end if;
+
+  select id into iid from items where lower(name) = lower('Stillabunt');
+  if iid is null then
+    insert into items (name, category_id, unit, kind, pack_size, pack_label, min_stock, expiry_date)
+    values ('Stillabunt', bitters_cat, 'pcs', 'consumable', 1, 'bottle', 0, null)
+    returning id into iid;
+    insert into txns (client_uuid, type, created_by, status, source, occurred_at, note)
+    values (gen_random_uuid(), 'ADD', admin_id, 'posted', 'manual', now(), 'Initial stock-in from 30 Sixty inventory sheet (July update)') returning id into tid;
+    insert into txn_lines (txn_id, item_id, qty) values (tid, iid, 5);
   end if;
 
 end $$;
