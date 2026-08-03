@@ -24,6 +24,7 @@ const ISSUES: { value: LineCondition; label: string }[] = [
 
 const ISSUE_LABEL: Record<LineCondition, string> = {
   ok: 'returned',
+  loose: 'opened, some left',
   consumed: 'served',
   wasted: 'spilled',
   damaged: 'broken',
@@ -53,6 +54,25 @@ function packsOut(b: OpenBalance): number {
 /** The reason that needs no explanation, given what the thing is. */
 function defaultReason(b: OpenBalance): LineCondition {
   return b.kind === 'returnable' ? 'lost' : 'consumed'
+}
+
+/**
+ * However much is physically coming back, split into whole sealed packs and
+ * whatever's left over. A bottle that's only part-used isn't a fresh pack any
+ * more — the leftover posts as 'loose' so the master sheet can tell "3 sealed
+ * bottles" apart from "1 open bottle with some left," which is exactly the
+ * distinction that matters for reordering and for the books.
+ */
+function splitSealedLoose(row: Row, backBase: number): { sealed: number; loose: number } {
+  if (row.bal.kind !== 'consumable' || backBase <= 0) return { sealed: backBase, loose: 0 }
+
+  const opt = row.mode === 'base' ? undefined : packOptions(row.bal).find((o) => o.id === row.mode)
+  if (!opt) return { sealed: 0, loose: backBase }
+
+  const wholePacks = Math.floor(backBase / opt.size + 1e-9)
+  const sealed = Number((wholePacks * opt.size).toFixed(3))
+  const loose = Number((backBase - sealed).toFixed(3))
+  return { sealed, loose }
 }
 
 /**
@@ -119,7 +139,9 @@ export default function BringBack() {
       for (const row of rows) {
         const back = Math.min(toBase(row), Number(row.bal.outstanding))
         const gap = Number(row.bal.outstanding) - back
-        if (back > 0) lines.push({ item_id: row.bal.item_id, qty: back, condition: 'ok' })
+        const { sealed, loose } = splitSealedLoose(row, back)
+        if (sealed > 0) lines.push({ item_id: row.bal.item_id, qty: sealed, condition: 'ok' })
+        if (loose > 0) lines.push({ item_id: row.bal.item_id, qty: loose, condition: 'loose' })
         if (gap > 0) lines.push({ item_id: row.bal.item_id, qty: gap, condition: row.reason })
       }
       if (lines.length === 0) throw new Error('Nothing to record.')
@@ -269,6 +291,19 @@ export default function BringBack() {
                   More than went out — capped at {formatPacks(out, row.bal)}.
                 </p>
               )}
+
+              {(() => {
+                const { sealed, loose } = splitSealedLoose(row, back)
+                if (loose <= 0) return null
+                return (
+                  <p className="text-xs text-ink-400">
+                    {sealed > 0 && <>{formatPacks(sealed, row.bal)} sealed · </>}
+                    <span className="text-warn-500">
+                      {formatPacks(loose, row.bal)} opened, not a full pack
+                    </span>
+                  </p>
+                )
+              })()}
 
               {gap > 0 &&
                 (row.issueOpen ? (

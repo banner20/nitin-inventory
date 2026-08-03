@@ -11,11 +11,14 @@ export type TxnType = 'OUT' | 'IN' | 'ADD' | 'WRITEOFF' | 'REPAIR'
 export type TxnStatus = 'draft' | 'posted' | 'void'
 export type TxnSource = 'manual' | 'nl' | 'photo' | 'import'
 /**
- * Why a line came back the way it did. Everything except `ok` and `damaged`
- * reduces what the company owns — they are separate so the books can tell
- * normal trading apart from breakage apart from stock nobody can account for.
+ * Why a line came back the way it did. Everything except `ok`, `loose` and
+ * `damaged` reduces what the company owns — they are separate so the books
+ * can tell normal trading apart from breakage apart from stock nobody can
+ * account for. `loose` is `ok` that isn't a sealed pack any more: an opened
+ * bottle with some of it left, tracked separately so "3 sealed bottles" and
+ * "1 open bottle with some left" never get flattened into one number.
  */
-export type LineCondition = 'ok' | 'damaged' | 'consumed' | 'wasted' | 'lost'
+export type LineCondition = 'ok' | 'loose' | 'damaged' | 'consumed' | 'wasted' | 'lost'
 export type EventStatus = 'planned' | 'out' | 'closed' | 'cancelled'
 
 export interface Profile {
@@ -77,6 +80,9 @@ export interface ItemAvailability {
   qty_out: number
   qty_quarantined: number
   qty_available: number
+  /** Opened/partial stock sitting in unsealed bottles — a subset of
+   * qty_available, not extra on top of it. */
+  qty_loose: number
   below_min: boolean
   /** Carried through so the UI can search the way people actually talk. */
   aliases: string[]
@@ -119,6 +125,7 @@ export function toItemAvailability(item: Item, categories: Category[]): ItemAvai
     qty_out: 0,
     qty_quarantined: 0,
     qty_available: 0,
+    qty_loose: 0,
     below_min: item.min_stock > 0,
     aliases: item.aliases,
     sku: item.sku,

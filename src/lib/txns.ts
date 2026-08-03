@@ -14,6 +14,8 @@ export interface PostLine {
   qty: number
   condition?: LineCondition
   from_quarantine?: boolean
+  /** OUT only: draw from this item's loose (opened, partial) pool instead of sealed stock. */
+  from_loose?: boolean
   unit_cost?: number | null
   vendor?: string | null
   note?: string | null

@@ -22,6 +22,9 @@ interface BasketRow {
   item: ItemAvailability
   amount: string
   mode: AmountMode
+  /** Drawing from this item's already-opened bottle instead of a fresh sealed
+   * pack — an accounting distinction, not just a UI convenience. */
+  fromLoose: boolean
 }
 
 function toBase(row: BasketRow): number {
@@ -66,7 +69,7 @@ export default function TakeOut() {
     try {
       const lines: PostLine[] = basket
         .filter((b) => toBase(b) > 0)
-        .map((b) => ({ item_id: b.item.item_id, qty: toBase(b) }))
+        .map((b) => ({ item_id: b.item.item_id, qty: toBase(b), from_loose: b.fromLoose || undefined }))
 
       if (lines.length === 0) throw new Error('Add something first.')
 
@@ -124,7 +127,7 @@ export default function TakeOut() {
               <button
                 className="w-full text-left px-3 py-3 hover:bg-ink-850 flex justify-between gap-3 items-center"
                 onClick={() => {
-                  setBasket((b) => [...b, { item: m, amount: '1', mode: defaultMode(m) }])
+                  setBasket((b) => [...b, { item: m, amount: '1', mode: defaultMode(m), fromLoose: false }])
                   setQ('')
                 }}
               >
@@ -181,6 +184,30 @@ export default function TakeOut() {
                   ariaLabel={`Quantity of ${row.item.name}`}
                   onChange={(amount, mode) => patch(row.item.item_id, { amount, mode })}
                 />
+
+                {Number(row.item.qty_loose) > 0 && (
+                  <label className="flex items-center gap-2 text-xs text-ink-400">
+                    <input
+                      type="checkbox"
+                      checked={row.fromLoose}
+                      onChange={(e) => {
+                        const checked = e.target.checked
+                        patch(row.item.item_id, {
+                          fromLoose: checked,
+                          mode: checked ? 'base' : defaultMode(row.item),
+                          amount: checked
+                            ? String(
+                                Math.min(Number(row.amount) || 0, Number(row.item.qty_loose)) ||
+                                  Number(row.item.qty_loose),
+                              )
+                            : row.amount,
+                        })
+                      }}
+                    />
+                    From the opened bottle ({formatPacks(row.item.qty_loose, row.item)} left) instead
+                    of a fresh one
+                  </label>
+                )}
 
                 {short && (
                   <p className="text-xs text-warn-500">

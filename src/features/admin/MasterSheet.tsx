@@ -280,6 +280,11 @@ function Row({ row, onEdit }: { row: ItemAvailability; onEdit: () => void }) {
             doesn't add up
           </span>
         )}
+        {Number(row.qty_loose) > 0 && (
+          <span className="block text-[10px] font-normal text-ink-500">
+            incl. {formatPacks(row.qty_loose, row)} opened
+          </span>
+        )}
       </td>
       <td className="p-3 text-right tabular text-ink-600">
         {Number(row.min_stock) ? formatPacks(row.min_stock, row) : ''}
