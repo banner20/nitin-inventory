@@ -203,9 +203,22 @@ export default function TakeOut() {
 
                 {Number(row.item.qty_loose) > 0 && (
                   <div className="space-y-1">
-                    <span className="text-xs text-ink-400">
-                      Plus from the opened bottle ({formatPacks(row.item.qty_loose, row.item)} left)
-                    </span>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs text-ink-400">
+                        Plus loose ({formatPacks(row.item.qty_loose, row.item)} left)
+                      </span>
+                      <button
+                        type="button"
+                        className="text-xs text-brand-400 underline"
+                        onClick={() =>
+                          patch(row.item.item_id, {
+                            looseAmount: String(Number(row.item.qty_loose)),
+                          })
+                        }
+                      >
+                        All the loose
+                      </button>
+                    </div>
                     <div className="flex items-center gap-2">
                       <input
                         className="input tabular text-center w-24"
@@ -224,7 +237,7 @@ export default function TakeOut() {
                             looseAmount: e.target.value === '' ? '' : String(capped),
                           })
                         }}
-                        aria-label={`Amount of ${row.item.name} from the opened bottle`}
+                        aria-label={`Loose amount of ${row.item.name}`}
                       />
                       <span className="text-sm text-ink-400">{row.item.unit}</span>
                     </div>

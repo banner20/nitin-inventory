@@ -282,7 +282,7 @@ function Row({ row, onEdit }: { row: ItemAvailability; onEdit: () => void }) {
         )}
         {Number(row.qty_loose) > 0 && (
           <span className="block text-[10px] font-normal text-ink-500">
-            incl. {formatPacks(row.qty_loose, row)} opened
+            incl. {formatPacks(row.qty_loose, row)} loose
           </span>
         )}
       </td>

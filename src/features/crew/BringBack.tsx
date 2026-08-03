@@ -24,7 +24,7 @@ const ISSUES: { value: LineCondition; label: string }[] = [
 
 const ISSUE_LABEL: Record<LineCondition, string> = {
   ok: 'returned',
-  loose: 'opened, some left',
+  loose: 'loose',
   consumed: 'served',
   wasted: 'spilled',
   damaged: 'broken',
@@ -290,9 +290,7 @@ export default function BringBack() {
 
               {row.bal.kind === 'consumable' && (
                 <div className="space-y-1">
-                  <span className="text-xs text-ink-400">
-                    Opened, with some left (exact amount)
-                  </span>
+                  <span className="text-xs text-ink-400">Loose (opened, exact amount)</span>
                   <div className="flex items-center gap-2">
                     <input
                       className="input tabular text-center w-24"
@@ -302,7 +300,7 @@ export default function BringBack() {
                       inputMode="decimal"
                       value={row.looseBack}
                       onChange={(e) => patch(idx, { looseBack: e.target.value })}
-                      aria-label={`Opened, partial amount of ${row.bal.item_name} coming back`}
+                      aria-label={`Loose amount of ${row.bal.item_name} coming back`}
                     />
                     <span className="text-sm text-ink-400">{row.bal.unit}</span>
                   </div>
@@ -319,7 +317,7 @@ export default function BringBack() {
                 <p className="text-xs text-ink-400">
                   {sealed > 0 && <>{formatPacks(sealed, row.bal)} sealed · </>}
                   <span className="text-warn-500">
-                    {formatPacks(loose, row.bal)} opened, not a full pack
+                    {formatPacks(loose, row.bal)} loose, not a full pack
                   </span>
                 </p>
               )}
