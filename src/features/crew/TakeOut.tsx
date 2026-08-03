@@ -18,7 +18,7 @@ import {
   type EventRecord,
   type ItemAvailability,
 } from '@/lib/types'
-import { parseVoiceTranscript, useVoiceRecorder } from '@/lib/voice'
+import { buildVoiceVocabulary, parseVoiceTranscript, useVoiceRecorder } from '@/lib/voice'
 
 interface BasketRow {
   item: ItemAvailability
@@ -110,7 +110,7 @@ export default function TakeOut() {
    * for review — quantities read back from natural speech are a best
    * guess, not a submission, so nothing posts until the crew member checks it. */
   async function handleVoiceStop() {
-    const text = await voice.stopAndTranscribe()
+    const text = await voice.stopAndTranscribe(buildVoiceVocabulary(items.data ?? []))
     if (!text) return
 
     const { matched, unmatched } = parseVoiceTranscript(text, items.data ?? [])

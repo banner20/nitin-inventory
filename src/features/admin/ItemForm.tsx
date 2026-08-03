@@ -7,6 +7,33 @@ interface AltPackDraft {
   packLabel: string
 }
 
+/** Type presets so "what kind of quantity is this" is a tap, not a spelling
+ * exercise — pcs/ml/g are the only three that show up in this catalog. */
+const TYPE_PRESETS: { label: string; unit: string; hint: string }[] = [
+  { label: 'Liquid', unit: 'ml', hint: 'bottles, syrups, juices' },
+  { label: 'Weight', unit: 'g', hint: 'powders, acids, dry goods' },
+  { label: 'Count', unit: 'pcs', hint: 'glassware, tools, garnishes counted whole' },
+]
+
+/** What a category is usually measured in — picking "Syrups & Sweeteners"
+ * switches the unit to ml automatically, same as picking "Liquid" above.
+ * Just a default: change it after if this particular item is the exception. */
+const CATEGORY_UNIT: Record<string, string> = {
+  Spirits: 'ml',
+  'Liqueurs & Bitters': 'ml',
+  'Beer & Wine': 'ml',
+  Mixers: 'ml',
+  'Juices & Purees': 'ml',
+  'Syrups & Sweeteners': 'ml',
+  Garnishes: 'pcs',
+  Ice: 'kg',
+  Glassware: 'pcs',
+  'Bar Tools': 'pcs',
+  'Bar Equipment': 'pcs',
+  'Pantry & Condiments': 'pcs',
+  'Acids & Mixology Chemicals': 'g',
+}
+
 /**
  * Add-or-edit an item, factored out so it behaves identically wherever it
  * appears — the master sheet's own "Add item" button, its per-row "Edit",
@@ -55,6 +82,13 @@ export default function ItemForm({
   async function checkDuplicates(value: string) {
     setName(value)
     if (!isEditing) setSimilar(await findSimilarItems(value))
+  }
+
+  function onCategoryChange(id: string) {
+    setCategoryId(id)
+    const category = categories.find((c) => c.id === id)
+    const preset = category ? CATEGORY_UNIT[category.name] : undefined
+    if (preset) setUnit(preset)
   }
 
   async function onSubmit(e: FormEvent) {
@@ -120,7 +154,7 @@ export default function ItemForm({
           <select
             className="input"
             value={categoryId}
-            onChange={(e) => setCategoryId(e.target.value)}
+            onChange={(e) => onCategoryChange(e.target.value)}
           >
             <option value="">Uncategorised</option>
             {categories.map((c) => (
@@ -167,6 +201,28 @@ export default function ItemForm({
           </div>
         </fieldset>
 
+        <fieldset className="space-y-1.5 sm:col-span-2 lg:col-span-3">
+          <legend className="text-sm text-ink-400">What kind of quantity is it?</legend>
+          <div className="grid grid-cols-3 gap-2">
+            {TYPE_PRESETS.map((t) => (
+              <button
+                key={t.unit}
+                type="button"
+                onClick={() => setUnit(t.unit)}
+                className={
+                  'p-2.5 rounded-lg border text-left transition-colors ' +
+                  (unit === t.unit
+                    ? 'border-brand-500 bg-ink-850'
+                    : 'border-ink-700 hover:border-ink-600')
+                }
+              >
+                <span className="block text-sm font-medium text-white">{t.label}</span>
+                <span className="block text-xs text-ink-400">{t.hint}</span>
+              </button>
+            ))}
+          </div>
+        </fieldset>
+
         <label className="space-y-1.5">
           <span className="text-sm text-ink-400">Unit</span>
           <input
@@ -175,37 +231,10 @@ export default function ItemForm({
             onChange={(e) => setUnit(e.target.value)}
             placeholder="ml, pcs, g, kg…"
           />
+          <span className="block text-xs text-ink-600">
+            Set by the category or the presets above — edit directly for anything unusual.
+          </span>
         </label>
-
-        <label className="space-y-1.5">
-          <span className="text-sm text-ink-400">Pack size (optional)</span>
-          <input
-            className="input tabular"
-            type="number"
-            min={0}
-            step="any"
-            value={packSize}
-            onChange={(e) => setPackSize(e.target.value)}
-            placeholder="750"
-          />
-        </label>
-
-        <label className="space-y-1.5">
-          <span className="text-sm text-ink-400">Pack name (optional)</span>
-          <input
-            className="input"
-            value={packLabel}
-            onChange={(e) => setPackLabel(e.target.value)}
-            placeholder="bottle, crate, bag…"
-          />
-        </label>
-
-        {(packSize || packLabel) && (
-          <p className="text-xs text-ink-600 sm:col-span-2 lg:col-span-3 -mt-2">
-            One {packLabel || 'pack'} = {packSize || '?'} {unit}. Leave both blank if it's just
-            counted loose, one at a time.
-          </p>
-        )}
 
         <label className="space-y-1.5">
           <span className="text-sm text-ink-400">SKU (optional)</span>
@@ -247,59 +276,94 @@ export default function ItemForm({
         </label>
       </div>
 
-      {(packSize || packLabel) && (
-        <div className="space-y-2 border-t border-ink-800 pt-4">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-ink-400">
-              Also bought in other sizes at once? (e.g. this syrup as bottles
-              <em>and</em> a bulk jug)
-            </span>
+      <div className="space-y-3 border-t border-ink-800 pt-4">
+        <div>
+          <h3 className="text-sm font-medium text-white">Pack sizes</h3>
+          <p className="text-xs text-ink-400">
+            How this is counted. Leave the default blank if it's just loose, one at a time —
+            add every size it's actually bought in below if there's more than one.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-[1fr_1fr] gap-2">
+          <label className="space-y-1.5">
+            <span className="text-xs text-ink-400">Default pack size</span>
+            <input
+              className="input tabular"
+              type="number"
+              min={0}
+              step="any"
+              value={packSize}
+              onChange={(e) => setPackSize(e.target.value)}
+              placeholder={`e.g. 750 (${unit})`}
+            />
+          </label>
+          <label className="space-y-1.5">
+            <span className="text-xs text-ink-400">Default pack name</span>
+            <input
+              className="input"
+              value={packLabel}
+              onChange={(e) => setPackLabel(e.target.value)}
+              placeholder="bottle, crate, bag…"
+            />
+          </label>
+        </div>
+        {(packSize || packLabel) && (
+          <p className="text-xs text-ink-600">
+            One {packLabel || 'pack'} = {packSize || '?'} {unit}.
+          </p>
+        )}
+
+        <div className="flex items-center justify-between pt-1">
+          <span className="text-xs text-ink-400">
+            Also bought in other sizes at once? (e.g. this syrup as bottles <em>and</em> a bulk
+            jug)
+          </span>
+          <button
+            type="button"
+            className="btn btn-ghost h-9 min-h-9 text-sm px-3 shrink-0"
+            onClick={() => setAltPacks((p) => [...p, { packSize: '', packLabel: '' }])}
+          >
+            + Add another size
+          </button>
+        </div>
+
+        {altPacks.map((p, i) => (
+          <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2">
+            <input
+              className="input tabular"
+              type="number"
+              min={0}
+              step="any"
+              value={p.packSize}
+              onChange={(e) =>
+                setAltPacks((rows) =>
+                  rows.map((r, ri) => (ri === i ? { ...r, packSize: e.target.value } : r)),
+                )
+              }
+              placeholder={`Size in ${unit}, e.g. 1000`}
+            />
+            <input
+              className="input"
+              value={p.packLabel}
+              onChange={(e) =>
+                setAltPacks((rows) =>
+                  rows.map((r, ri) => (ri === i ? { ...r, packLabel: e.target.value } : r)),
+                )
+              }
+              placeholder="jug, case, tin…"
+            />
             <button
               type="button"
-              className="btn btn-ghost h-9 min-h-9 text-sm px-3"
-              onClick={() => setAltPacks((p) => [...p, { packSize: '', packLabel: '' }])}
+              className="text-ink-600 hover:text-bad-500 px-2"
+              onClick={() => setAltPacks((rows) => rows.filter((_, ri) => ri !== i))}
+              aria-label="Remove this size"
             >
-              + Add another size
+              ✕
             </button>
           </div>
-
-          {altPacks.map((p, i) => (
-            <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2">
-              <input
-                className="input tabular"
-                type="number"
-                min={0}
-                step="any"
-                value={p.packSize}
-                onChange={(e) =>
-                  setAltPacks((rows) =>
-                    rows.map((r, ri) => (ri === i ? { ...r, packSize: e.target.value } : r)),
-                  )
-                }
-                placeholder={`Size in ${unit}, e.g. 1000`}
-              />
-              <input
-                className="input"
-                value={p.packLabel}
-                onChange={(e) =>
-                  setAltPacks((rows) =>
-                    rows.map((r, ri) => (ri === i ? { ...r, packLabel: e.target.value } : r)),
-                  )
-                }
-                placeholder="jug, case, tin…"
-              />
-              <button
-                type="button"
-                className="text-ink-600 hover:text-bad-500 px-2"
-                onClick={() => setAltPacks((rows) => rows.filter((_, ri) => ri !== i))}
-                aria-label="Remove this size"
-              >
-                ✕
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
+        ))}
+      </div>
 
       {similar.length > 0 && (
         <div className="rounded-lg border border-warn-500/40 bg-warn-500/10 p-3 text-sm">

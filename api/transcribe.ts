@@ -20,8 +20,14 @@ export default async function handler(request: Request): Promise<Response> {
     )
   }
 
-  const audio = await request.blob()
-  if (audio.size === 0) {
+  const incoming = await request.formData()
+  const audio = incoming.get('audio')
+  // Names from the master sheet, sent by the client — Whisper's prompt field
+  // biases its vocabulary toward whatever it's given, so "Xanthan Gum" gets
+  // recognized instead of misheard as something that merely sounds like it.
+  const vocabulary = incoming.get('vocabulary')
+
+  if (!(audio instanceof Blob) || audio.size === 0) {
     return new Response(JSON.stringify({ error: 'No audio received.' }), {
       status: 400,
       headers: { 'content-type': 'application/json' },
@@ -32,6 +38,12 @@ export default async function handler(request: Request): Promise<Response> {
   form.append('file', audio, 'audio.webm')
   form.append('model', 'whisper-large-v3-turbo')
   form.append('response_format', 'json')
+  if (typeof vocabulary === 'string' && vocabulary.trim()) {
+    // Whisper's prompt caps out around 224 tokens and silently truncates
+    // past that — cut to a safe character budget rather than let the API
+    // reject or mangle an oversized prompt.
+    form.append('prompt', vocabulary.slice(0, 900))
+  }
 
   const groqRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
     method: 'POST',
