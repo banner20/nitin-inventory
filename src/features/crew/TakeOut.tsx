@@ -4,7 +4,7 @@ import { useAuth } from '@/features/auth/AuthProvider'
 import { useAsync } from '@/lib/useAsync'
 import { fetchItemAvailability } from '@/lib/queries'
 import { createEvent, fetchActiveEvents } from '@/lib/events'
-import { postTxn, type PostLine } from '@/lib/txns'
+import { createItem, postTxn, type PostLine } from '@/lib/txns'
 import {
   AmountInput,
   amountToBase,
@@ -14,6 +14,7 @@ import {
 import {
   formatPacks,
   itemMatches,
+  toItemAvailability,
   type EventRecord,
   type ItemAvailability,
 } from '@/lib/types'
@@ -56,6 +57,8 @@ export default function TakeOut() {
   const [basket, setBasket] = useState<BasketRow[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [quickAdding, setQuickAdding] = useState(false)
+  const [quickAddError, setQuickAddError] = useState<string | null>(null)
 
   const chosen = new Set(basket.map((b) => b.item.item_id))
 
@@ -69,6 +72,35 @@ export default function TakeOut() {
 
   function patch(id: string, next: Partial<BasketRow>) {
     setBasket((b) => b.map((x) => (x.item.item_id === id ? { ...x, ...next } : x)))
+  }
+
+  /**
+   * Something the master sheet has never heard of, reached for mid-service.
+   * Creates it with the barest defaults so the take-out isn't blocked — a
+   * manager fills in category, pack size and kind properly afterwards from
+   * the master sheet's Edit button.
+   */
+  async function quickAdd(name: string) {
+    setQuickAdding(true)
+    setQuickAddError(null)
+    try {
+      const created = await createItem({
+        name,
+        categoryId: null,
+        unit: 'pcs',
+        minStock: 0,
+        kind: 'consumable',
+        aliases: [],
+      })
+      const withStock = toItemAvailability(created, [])
+      setBasket((b) => [...b, { item: withStock, amount: '1', mode: defaultMode(withStock), looseAmount: '' }])
+      setQ('')
+      items.reload()
+    } catch (err) {
+      setQuickAddError(err instanceof Error ? err.message : 'Could not add the item.')
+    } finally {
+      setQuickAdding(false)
+    }
   }
 
   async function post() {
@@ -157,8 +189,23 @@ export default function TakeOut() {
         </ul>
       )}
 
-      {q && matches.length === 0 && (
-        <p className="text-sm text-ink-400">Nothing matches “{q}”.</p>
+      {q.trim() && matches.length === 0 && (
+        <div className="card p-3 space-y-2">
+          <p className="text-sm text-ink-400">
+            Nothing matches “{q.trim()}” — not on the master sheet yet.
+          </p>
+          <button
+            className="btn btn-ghost w-full"
+            onClick={() => void quickAdd(q.trim())}
+            disabled={quickAdding}
+          >
+            {quickAdding ? 'Adding…' : `Quick add "${q.trim()}" and take it out`}
+          </button>
+          <p className="text-xs text-ink-600">
+            A manager can fill in its category and pack size later from the master sheet.
+          </p>
+          {quickAddError && <p className="text-xs text-bad-500">{quickAddError}</p>}
+        </div>
       )}
 
       {basket.length === 0 ? (
