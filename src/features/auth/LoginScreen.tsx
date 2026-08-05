@@ -31,17 +31,19 @@ export default function LoginScreen() {
   }
 
   return (
-    <main className="min-h-dvh grid place-items-center p-6">
-      <div className="w-full max-w-sm space-y-8">
-        <header className="text-center space-y-2">
-          <img src="/icon.svg" alt="" className="size-14 mx-auto" />
-          <h1 className="text-2xl font-semibold text-white">Nitin Inventory</h1>
-          <p className="text-sm text-ink-400">Sign in with your employee code.</p>
+    <main className="min-h-dvh grid place-items-center p-6 bg-canvas">
+      <div className="w-full max-w-sm space-y-6">
+        <header className="text-center space-y-3">
+          <img src="/icon.svg" alt="" className="size-12 mx-auto" />
+          <div>
+            <h1 className="text-xl font-semibold">Nitin Inventory</h1>
+            <p className="text-sm text-fg-muted mt-1">Sign in with your employee code.</p>
+          </div>
         </header>
 
-        <form onSubmit={onSubmit} className="space-y-4" noValidate>
+        <form onSubmit={onSubmit} className="card p-5 space-y-4" noValidate>
           <div className="space-y-1.5">
-            <label htmlFor="empCode" className="text-sm font-medium text-ink-400">
+            <label htmlFor="empCode" className="block text-sm font-medium">
               Employee code
             </label>
             <input
@@ -61,13 +63,13 @@ export default function LoginScreen() {
 
           <div className="space-y-1.5">
             <div className="flex items-baseline justify-between">
-              <label htmlFor="password" className="text-sm font-medium text-ink-400">
+              <label htmlFor="password" className="block text-sm font-medium">
                 Password
               </label>
               <button
                 type="button"
                 onClick={() => setShow((s) => !s)}
-                className="text-xs text-ink-400 hover:text-ink-200"
+                className="text-xs font-medium text-fg-muted hover:text-fg"
               >
                 {show ? 'Hide' : 'Show'}
               </button>
@@ -86,7 +88,10 @@ export default function LoginScreen() {
           </div>
 
           {error && (
-            <p role="alert" className="text-sm text-bad-500">
+            <p
+              role="alert"
+              className="text-sm text-bad-700 bg-bad-50 border border-bad-200 rounded-lg px-3 py-2"
+            >
               {error}
             </p>
           )}
@@ -100,7 +105,7 @@ export default function LoginScreen() {
           </button>
         </form>
 
-        <p className="text-center text-xs text-ink-600">
+        <p className="text-center text-xs text-fg-subtle">
           Forgotten your password? Ask a manager to reset it.
         </p>
       </div>

@@ -1,29 +1,62 @@
 @import 'tailwindcss';
 
 /*
-  Dark-first on purpose. This app gets used in dim store rooms and on loading
-  docks before sunrise; a white screen at 5am is genuinely unpleasant. High
-  contrast, large hit targets, no thin type.
+  Light, quiet, and dense — a working tool, not a dashboard demo.
+
+  The palette is deliberately near-neutral: one restrained indigo carries
+  every interactive affordance, and colour otherwise appears only where it
+  means something (short, expiring, overdue, damaged). When the only red on
+  screen is a real problem, a real problem is impossible to miss.
+
+  Surfaces are white on a faintly cool canvas, separated by hairlines rather
+  than shadows. Shadows are used once — on the card — and barely.
 */
 @theme {
-  --color-ink-950: #080d18;
-  --color-ink-900: #0f172a;
-  --color-ink-850: #151f36;
-  --color-ink-800: #1e293b;
-  --color-ink-700: #334155;
-  --color-ink-600: #475569;
-  --color-ink-400: #94a3b8;
-  --color-ink-200: #e2e8f0;
+  /* Surfaces, lightest to most recessed. */
+  --color-canvas: #f5f6f8;
+  --color-surface: #ffffff;
+  --color-surface-alt: #fafbfc;
+  --color-surface-hover: #f4f5f7;
+  --color-surface-sunken: #eef0f3;
 
-  --color-brand-400: #38bdf8;
-  --color-brand-500: #0ea5e9;
-  --color-brand-600: #0284c7;
+  /* Hairlines. `line` is the default; `line-strong` is for a border that
+     has to read as an edge you can act on, like an unselected option. */
+  --color-line: #e5e7eb;
+  --color-line-strong: #d3d7dd;
 
-  --color-good-500: #22c55e;
-  --color-warn-500: #f59e0b;
-  --color-bad-500: #ef4444;
+  /* Type, in descending emphasis. Three steps is enough for any screen —
+     a fourth just makes the hierarchy mushy. */
+  --color-fg: #14161a;
+  --color-fg-muted: #5c636e;
+  --color-fg-subtle: #8b929d;
 
-  --radius-card: 0.875rem;
+  --color-brand-50: #eef2ff;
+  --color-brand-100: #e0e7ff;
+  --color-brand-200: #c7d2fe;
+  --color-brand-500: #4f46e5;
+  --color-brand-600: #4338ca;
+  --color-brand-700: #3730a3;
+
+  --color-good-50: #ecfdf5;
+  --color-good-200: #a7f3d0;
+  --color-good-600: #059669;
+  --color-good-700: #047857;
+
+  --color-warn-50: #fffbeb;
+  --color-warn-200: #fde68a;
+  --color-warn-300: #fcd34d;
+  --color-warn-600: #b45309;
+  --color-warn-700: #92400e;
+
+  --color-bad-50: #fef2f2;
+  --color-bad-200: #fecaca;
+  --color-bad-600: #dc2626;
+  --color-bad-700: #b91c1c;
+
+  --radius-card: 0.625rem;
+
+  --shadow-card: 0 1px 2px 0 rgb(20 22 26 / 0.04);
+  --shadow-pop: 0 4px 12px -2px rgb(20 22 26 / 0.08), 0 2px 4px -2px rgb(20 22 26 / 0.04);
 }
 
 @layer base {
@@ -33,11 +66,17 @@
   }
 
   body {
-    @apply bg-ink-950 text-ink-200 antialiased;
-    font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    @apply bg-canvas text-fg antialiased;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
     /* Respect notches and the iOS home indicator when installed. */
     padding: env(safe-area-inset-top) env(safe-area-inset-right)
       env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+
+  /* Headings sit slightly tighter than body text — the standard trick that
+     makes a title read as a title without reaching for extra weight. */
+  h1, h2, h3 {
+    letter-spacing: -0.011em;
   }
 
   /* Numbers line up in the master sheet and every quantity column. */
@@ -46,13 +85,17 @@
   }
 
   :focus-visible {
-    @apply outline-2 outline-offset-2 outline-brand-400;
+    @apply outline-2 outline-offset-2 outline-brand-500;
+  }
+
+  ::selection {
+    @apply bg-brand-100 text-brand-700;
   }
 }
 
 @layer components {
   .card {
-    @apply bg-ink-900 border border-ink-800 rounded-card;
+    @apply bg-surface border border-line rounded-card shadow-card;
   }
 
   /*
@@ -62,25 +105,66 @@
   */
   .btn {
     @apply inline-flex items-center justify-center gap-2 min-h-11 px-4 rounded-lg
-           font-semibold transition-colors disabled:opacity-40
+           text-sm font-semibold transition-colors disabled:opacity-40
            disabled:pointer-events-none;
   }
 
   .btn-primary {
-    @apply bg-brand-500 text-ink-950 hover:bg-brand-400;
+    @apply bg-brand-500 text-white hover:bg-brand-600;
   }
 
+  /* An outlined secondary rather than a filled grey one: on a light canvas a
+     grey fill competes with the primary action instead of deferring to it. */
   .btn-ghost {
-    @apply bg-ink-800 text-ink-200 hover:bg-ink-700;
+    @apply bg-surface text-fg border border-line-strong hover:bg-surface-hover;
+  }
+
+  .btn-quiet {
+    @apply bg-transparent text-fg-muted hover:bg-surface-hover hover:text-fg;
   }
 
   .btn-danger {
-    @apply bg-bad-500 text-white hover:opacity-90;
+    @apply bg-bad-600 text-white hover:bg-bad-700;
   }
 
   .input {
-    @apply w-full min-h-11 px-3 rounded-lg bg-ink-850 border border-ink-700
-           text-ink-200 placeholder:text-ink-600
-           focus:border-brand-500 focus:outline-none;
+    @apply w-full min-h-11 px-3 rounded-lg bg-surface border border-line-strong
+           text-sm text-fg placeholder:text-fg-subtle
+           focus:border-brand-500 focus:ring-2 focus:ring-brand-100 focus:outline-none
+           transition-shadow;
+  }
+
+  /* Small status pills. Soft tint plus a matching border so they still read
+     as distinct on a white card without shouting. */
+  .badge {
+    @apply inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md
+           text-[11px] font-medium whitespace-nowrap border;
+  }
+
+  .badge-neutral {
+    @apply bg-surface-sunken text-fg-muted border-line;
+  }
+
+  .badge-brand {
+    @apply bg-brand-50 text-brand-700 border-brand-200;
+  }
+
+  .badge-good {
+    @apply bg-good-50 text-good-700 border-good-200;
+  }
+
+  .badge-warn {
+    @apply bg-warn-50 text-warn-700 border-warn-200;
+  }
+
+  .badge-bad {
+    @apply bg-bad-50 text-bad-700 border-bad-200;
+  }
+
+  /* Column headers in the data tables: small, uppercase, quiet — the row
+     content is what people are reading, not the labels. */
+  .th {
+    @apply px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider
+           text-fg-subtle whitespace-nowrap;
   }
 }

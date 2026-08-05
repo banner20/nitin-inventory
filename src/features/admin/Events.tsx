@@ -4,10 +4,10 @@ import { createEvent, fetchAllEvents, setEventStatus } from '@/lib/events'
 import type { EventRecord, EventStatus } from '@/lib/types'
 
 const STATUS_STYLE: Record<EventStatus, string> = {
-  planned: 'text-ink-400',
-  out: 'text-brand-400',
-  closed: 'text-ink-600',
-  cancelled: 'text-ink-600 line-through',
+  planned: 'text-fg-muted',
+  out: 'text-brand-600',
+  closed: 'text-fg-subtle',
+  cancelled: 'text-fg-subtle line-through',
 }
 
 /** Local datetime string for <input type="datetime-local">. */
@@ -27,8 +27,8 @@ export default function Events() {
     <div className="space-y-5 max-w-4xl">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-white">Events</h1>
-          <p className="text-sm text-ink-400">
+          <h1 className="text-lg font-semibold">Events</h1>
+          <p className="text-sm text-fg-muted">
             Stock can only go out against an event, so this is what the crew pick from.
           </p>
         </div>
@@ -37,7 +37,7 @@ export default function Events() {
         </button>
       </header>
 
-      {msg && <p className="text-sm text-good-500">{msg}</p>}
+      {msg && <p className="text-sm text-good-600">{msg}</p>}
 
       {adding && (
         <NewEventForm
@@ -49,17 +49,17 @@ export default function Events() {
         />
       )}
 
-      {events.loading && <p className="text-sm text-ink-400">Loading…</p>}
-      {events.error && <p className="text-sm text-bad-500">{events.error.message}</p>}
+      {events.loading && <p className="text-sm text-fg-muted">Loading…</p>}
+      {events.error && <p className="text-sm text-bad-600">{events.error.message}</p>}
 
       {!events.loading && list.length === 0 && (
-        <div className="card p-6 text-center text-sm text-ink-400">
+        <div className="card p-6 text-center text-sm text-fg-muted">
           No events yet. Create one so stock has somewhere to go.
         </div>
       )}
 
       {list.length > 0 && (
-        <div className="card divide-y divide-ink-800">
+        <div className="card divide-y divide-line">
           {list.map((e) => (
             <EventRow
               key={e.id}
@@ -98,13 +98,13 @@ function EventRow({
   return (
     <div className="p-3 flex flex-wrap items-center justify-between gap-3">
       <div className="min-w-0">
-        <p className="font-medium text-white truncate">
+        <p className="font-medium text-sm truncate">
           {event.name}
           <span className={`ml-2 text-xs font-normal ${STATUS_STYLE[event.status]}`}>
             {event.status}
           </span>
         </p>
-        <p className="text-xs text-ink-400">
+        <p className="text-xs text-fg-muted">
           {event.client ? `${event.client} · ` : ''}
           {event.venue ? `${event.venue} · ` : ''}
           {new Date(event.starts_at).toLocaleString('en-IN', {
@@ -168,7 +168,7 @@ function NewEventForm({ onCreated }: { onCreated: (name: string) => void }) {
     <form onSubmit={onSubmit} className="card p-4 space-y-4">
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="space-y-1.5 sm:col-span-2">
-          <span className="text-sm text-ink-400">Event name</span>
+          <span className="text-sm text-fg-muted">Event name</span>
           <input
             className="input"
             value={name}
@@ -178,15 +178,15 @@ function NewEventForm({ onCreated }: { onCreated: (name: string) => void }) {
           />
         </label>
         <label className="space-y-1.5">
-          <span className="text-sm text-ink-400">Client (optional)</span>
+          <span className="text-sm text-fg-muted">Client (optional)</span>
           <input className="input" value={client} onChange={(e) => setClient(e.target.value)} />
         </label>
         <label className="space-y-1.5">
-          <span className="text-sm text-ink-400">Venue (optional)</span>
+          <span className="text-sm text-fg-muted">Venue (optional)</span>
           <input className="input" value={venue} onChange={(e) => setVenue(e.target.value)} />
         </label>
         <label className="space-y-1.5">
-          <span className="text-sm text-ink-400">Starts</span>
+          <span className="text-sm text-fg-muted">Starts</span>
           <input
             className="input"
             type="datetime-local"
@@ -196,7 +196,7 @@ function NewEventForm({ onCreated }: { onCreated: (name: string) => void }) {
           />
         </label>
         <label className="space-y-1.5">
-          <span className="text-sm text-ink-400">Ends</span>
+          <span className="text-sm text-fg-muted">Ends</span>
           <input
             className="input"
             type="datetime-local"
@@ -207,11 +207,11 @@ function NewEventForm({ onCreated }: { onCreated: (name: string) => void }) {
         </label>
       </div>
 
-      <p className="text-xs text-ink-600">
+      <p className="text-xs text-fg-subtle">
         The end time is what makes stock show as overdue, so it's worth being roughly right.
       </p>
 
-      {error && <p className="text-sm text-bad-500">{error}</p>}
+      {error && <p className="text-sm text-bad-600">{error}</p>}
 
       <button type="submit" className="btn btn-primary" disabled={busy || !name.trim()}>
         {busy ? 'Creating…' : 'Create event'}

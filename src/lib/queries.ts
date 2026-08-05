@@ -1,5 +1,12 @@
 import { supabase } from './supabase'
-import type { ItemAvailability, OpenBalance, Profile, TxnHistoryEntry, TxnType } from './types'
+import type {
+  ItemAvailability,
+  OpenBalance,
+  PriceHistoryEntry,
+  Profile,
+  TxnHistoryEntry,
+  TxnType,
+} from './types'
 
 /**
  * Every read goes through here so the rest of the app never writes a raw
@@ -88,6 +95,23 @@ export async function fetchTxnHistory(
   const { data, error } = await query
   if (error) throw error
   return (data ?? []) as TxnHistoryEntry[]
+}
+
+/**
+ * What one item has actually been bought for, newest first. The price trail
+ * behind the single "current price" figure — bought at ₹100 in June and ₹120
+ * in August is a fact worth being able to see.
+ */
+export async function fetchPriceHistory(itemId: string): Promise<PriceHistoryEntry[]> {
+  const { data, error } = await supabase
+    .from('v_item_price_history')
+    .select('*')
+    .eq('item_id', itemId)
+    .order('occurred_at', { ascending: false })
+    .limit(12)
+
+  if (error) throw error
+  return (data ?? []) as PriceHistoryEntry[]
 }
 
 export async function fetchProfiles(): Promise<Profile[]> {

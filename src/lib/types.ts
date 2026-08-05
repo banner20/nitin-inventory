@@ -53,6 +53,8 @@ export interface Item {
   /** What one pack is called — bottle, crate, bag. Null means loose. */
   pack_label: string | null
   expiry_date: string | null
+  /** Current price of one base unit. See ItemAvailability.unit_cost. */
+  unit_cost: number | null
 }
 
 /**
@@ -66,6 +68,10 @@ export interface AltPack {
   pack_size: number
   pack_label: string
   sku: string | null
+  /** Price of one base unit when bought in THIS size. Held per size because
+   * bulk is normally cheaper per unit than the default pack — a 1L jug at
+   * ₹700 is ₹0.70/ml where a 250ml bottle at ₹200 is ₹0.80/ml. */
+  unit_cost: number | null
 }
 
 /** An item plus its derived stock position. Never stored — always computed. */
@@ -96,12 +102,64 @@ export interface ItemAvailability {
   /** Extra pack sizes this item is also bought in, beyond the default above. */
   alt_packs: AltPack[] | null
   expiry_date: string | null
+  /**
+   * Current price of one base unit, used for valuation. Kept up to date by
+   * whatever the thing was last actually bought for, and editable by hand for
+   * opening balances and corrections.
+   */
+  unit_cost: number | null
+  /** qty_available × unit_cost. Null — not zero — when there's no price on
+   * file, so "we don't know what this is worth" stays distinguishable from
+   * "it's worth nothing". */
+  stock_value: number | null
   /** Read from purchase history, not stored — the last ADD line's vendor,
    * cost, and when. Answers "who did we last buy this from, and for how
    * much" without a static field that can silently go stale. */
   last_vendor: string | null
   last_unit_cost: number | null
   last_purchased_at: string | null
+}
+
+/** One purchase of an item, for the price trail on the edit form. */
+export interface PriceHistoryEntry {
+  item_id: string
+  occurred_at: string
+  unit_cost: number
+  qty: number
+  line_total: number
+  vendor: string | null
+  bought_by: string | null
+}
+
+/**
+ * Money, the way an invoice is written. Prices are held per base unit so a
+ * half bottle costs half a bottle, but nobody quotes ₹0.642857 per ml — the
+ * pack is what gets bought and what gets read back.
+ */
+export function formatMoney(amount: number | null | undefined): string {
+  if (amount == null) return '—'
+  return `₹${Number(amount).toLocaleString('en-IN', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })}`
+}
+
+/** Price of one whole pack, from the per-base-unit price. */
+export function packCost(unitCost: number, item: PackInfo): number {
+  const size = item.pack_label && item.pack_size > 1 ? Number(item.pack_size) : 1
+  return unitCost * size
+}
+
+/** How one pack's price reads: "₹450 per bottle", or "₹12 each" when the
+ * item isn't packed. */
+export function formatUnitPrice(
+  unitCost: number | null | undefined,
+  item: PackInfo,
+): string {
+  if (unitCost == null) return '—'
+  const packed = item.pack_label && item.pack_size > 1
+  if (!packed) return `${formatMoney(unitCost)} each`
+  return `${formatMoney(packCost(unitCost, item))} per ${item.pack_label}`
 }
 
 export type ItemKind = 'returnable' | 'consumable'
@@ -135,6 +193,8 @@ export function toItemAvailability(item: Item, categories: Category[]): ItemAvai
     pack_label: item.pack_label,
     alt_packs: [],
     expiry_date: item.expiry_date,
+    unit_cost: item.unit_cost,
+    stock_value: item.unit_cost == null ? null : 0,
     last_vendor: null,
     last_unit_cost: null,
     last_purchased_at: null,

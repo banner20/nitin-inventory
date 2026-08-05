@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom'
 import { useAsync } from '@/lib/useAsync'
 import { fetchAllOpenBalances } from '@/lib/queries'
 import { IconIn, IconOut } from '@/components/icons'
-import { formatPacks, type OpenBalance } from '@/lib/types'
+import { EmptyState, ErrorText, Loading } from '@/components/ui'
+import { formatQty, type OpenBalance } from '@/lib/types'
 
 /**
  * "What's checked out right now?" — everyone's, not just yours. Nothing
@@ -36,58 +37,99 @@ export default function CrewHome() {
   }, [balances])
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <div className="grid grid-cols-2 gap-3">
-        <Link to="/out" className="card p-4 flex flex-col items-center gap-2 hover:border-brand-500 transition-colors">
-          <IconOut className="size-7 text-brand-400" />
-          <span className="font-semibold text-white">Take out</span>
-        </Link>
-        <Link to="/in" className="card p-4 flex flex-col items-center gap-2 hover:border-brand-500 transition-colors">
-          <IconIn className="size-7 text-good-500" />
-          <span className="font-semibold text-white">Bring back</span>
-        </Link>
+        <ActionCard
+          to="/out"
+          label="Take out"
+          hint="Load for a job"
+          Icon={IconOut}
+          tone="brand"
+        />
+        <ActionCard
+          to="/in"
+          label="Bring back"
+          hint="Return or log an issue"
+          Icon={IconIn}
+          tone="good"
+        />
       </div>
 
+      {overdue.length > 0 && (
+        <div className="rounded-lg border border-warn-200 bg-warn-50 px-3 py-2.5">
+          <p className="text-sm text-warn-700">
+            <span className="font-semibold">{overdue.length}</span> line
+            {overdue.length === 1 ? ' is' : 's are'} past the event end date.
+          </p>
+        </div>
+      )}
+
       <section className="space-y-3">
-        <div className="flex items-baseline justify-between">
-          <h2 className="font-semibold text-white">Checked out right now</h2>
+        <div className="flex items-baseline justify-between gap-2">
+          <h2 className="text-sm font-semibold">Checked out right now</h2>
           {!loading && (
-            <span className="text-sm text-ink-400 tabular">
+            <span className="text-xs text-fg-subtle tabular">
               {totalItems} item{totalItems === 1 ? '' : 's'}
             </span>
           )}
         </div>
 
-        {loading && <p className="text-sm text-ink-400">Loading…</p>}
+        {loading && <Loading />}
 
-        {error && (
-          <p className="text-sm text-bad-500">
-            Couldn’t load open items. {error.message}
-          </p>
-        )}
+        {error && <ErrorText>Couldn’t load open items. {error.message}</ErrorText>}
 
         {!loading && !error && balances.length === 0 && (
-          <div className="card p-5 text-center">
-            <p className="text-sm text-ink-400">Nothing checked out right now.</p>
-          </div>
-        )}
-
-        {overdue.length > 0 && (
-          <p className="text-sm text-warn-500">
-            {overdue.length} line{overdue.length === 1 ? ' is' : 's are'} past the event
-            end date.
-          </p>
+          <EmptyState
+            title="Nothing checked out"
+            hint="When someone loads stock for a job it'll show up here, with their name on it."
+          />
         )}
 
         {events.map(([eventId, lines]) => (
           <EventGroup key={eventId} lines={lines} />
         ))}
 
-        <Link to="/history" className="block text-center text-sm text-brand-400 underline py-2">
-          See full history — everything checked out and checked in
+        <Link
+          to="/history"
+          className="block text-center text-sm font-medium text-brand-600 hover:text-brand-700 py-2"
+        >
+          See full history →
         </Link>
       </section>
     </div>
+  )
+}
+
+/** The two things this app exists to do, given the size they deserve. */
+function ActionCard({
+  to,
+  label,
+  hint,
+  Icon,
+  tone,
+}: {
+  to: string
+  label: string
+  hint: string
+  Icon: typeof IconOut
+  tone: 'brand' | 'good'
+}) {
+  const iconClass =
+    tone === 'brand' ? 'bg-brand-50 text-brand-600' : 'bg-good-50 text-good-600'
+
+  return (
+    <Link
+      to={to}
+      className="card p-4 flex flex-col gap-2.5 hover:border-line-strong hover:shadow-pop transition-all"
+    >
+      <span className={`size-10 rounded-lg grid place-items-center ${iconClass}`}>
+        <Icon className="size-5" />
+      </span>
+      <span className="min-w-0">
+        <span className="block font-semibold text-sm">{label}</span>
+        <span className="block text-xs text-fg-subtle">{hint}</span>
+      </span>
+    </Link>
   )
 }
 
@@ -99,24 +141,25 @@ function EventGroup({ lines }: { lines: OpenBalance[] }) {
   return (
     <div className="card overflow-hidden">
       <button
-        className="w-full p-3 flex items-center justify-between gap-3 text-left"
+        className="w-full p-3 flex items-center justify-between gap-3 text-left hover:bg-surface-hover transition-colors"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
       >
         <div className="min-w-0">
-          <p className="font-medium text-white truncate">{first.event_name}</p>
-          <p className="text-xs text-ink-400">
+          <p className="font-medium text-sm truncate">{first.event_name}</p>
+          <p className="text-xs text-fg-subtle">
             {lines.length} item{lines.length === 1 ? '' : 's'} · Due{' '}
-            {new Date(first.ends_at).toLocaleDateString()}
+            {new Date(first.ends_at).toLocaleDateString('en-IN', {
+              day: 'numeric',
+              month: 'short',
+            })}
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {first.overdue && (
-            <span className="text-xs font-semibold text-warn-500">Overdue</span>
-          )}
+          {first.overdue && <span className="badge badge-warn">Overdue</span>}
           <svg
             viewBox="0 0 24 24"
-            className={`size-5 text-ink-400 transition-transform ${open ? 'rotate-180' : ''}`}
+            className={`size-4 text-fg-subtle transition-transform ${open ? 'rotate-180' : ''}`}
             fill="none"
             stroke="currentColor"
             strokeWidth={2}
@@ -130,21 +173,21 @@ function EventGroup({ lines }: { lines: OpenBalance[] }) {
       </button>
 
       {open && (
-        <ul className="divide-y divide-ink-800 border-t border-ink-800">
+        <ul className="divide-y divide-line border-t border-line">
           {lines.map((line) => (
             <li
               key={`${line.item_id}-${line.person_id}`}
               className="px-3 py-2 flex items-center justify-between gap-3 text-sm"
             >
               <div className="min-w-0">
-                <p className="text-ink-200 truncate">{line.item_name}</p>
-                <p className="text-xs text-ink-600 truncate">{line.person_name}</p>
+                <p className="truncate">{line.item_name}</p>
+                <p className="text-xs text-fg-subtle truncate">{line.person_name}</p>
               </div>
               <span
-                className="tabular text-ink-400 shrink-0"
+                className="tabular text-fg-muted shrink-0"
                 title={`${line.outstanding} ${line.unit}`}
               >
-                {formatPacks(line.outstanding, line)}
+                {formatQty(line.outstanding, line)}
               </span>
             </li>
           ))}

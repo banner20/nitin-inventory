@@ -3,7 +3,13 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { useAsync } from '@/lib/useAsync'
 import { fetchItemAvailability } from '@/lib/queries'
 import { fetchCategories, postTxn, type PostLine } from '@/lib/txns'
-import { formatPacks, itemMatches, toItemAvailability, type ItemAvailability } from '@/lib/types'
+import {
+  formatMoney,
+  formatQty,
+  itemMatches,
+  toItemAvailability,
+  type ItemAvailability,
+} from '@/lib/types'
 import {
   AmountInput,
   amountToBase,
@@ -11,6 +17,7 @@ import {
   packOptions,
   type AmountMode,
 } from '@/components/AmountInput'
+import { EmptyState, ErrorText, PageHeader } from '@/components/ui'
 import ItemForm from './ItemForm'
 
 interface DraftRow {
@@ -19,6 +26,9 @@ interface DraftRow {
   mode: AmountMode
   /** Cost of one whatever-unit-is-selected — how invoices are actually written. */
   packCost: string
+  /** True for a row whose item was created here and now, so the summary can
+   * say how many things are new rather than just how many lines there are. */
+  isNew?: boolean
 }
 
 function toBase(row: DraftRow): number {
@@ -29,12 +39,40 @@ function lineTotal(row: DraftRow): number {
   return (Number(row.packCost) || 0) * (Number(row.amount) || 0)
 }
 
+/** The price already on file for one pack of whichever size is selected.
+ * Each size keeps its own, because bulk is cheaper per unit. */
+function priceFor(item: ItemAvailability, mode: AmountMode): string {
+  const alt = (item.alt_packs ?? []).find((p) => p.id === mode)
+  if (alt) {
+    return alt.unit_cost == null
+      ? ''
+      : String(Number((alt.unit_cost * Number(alt.pack_size)).toFixed(2)))
+  }
+  const size = packOptions(item).find((o) => o.id === mode)?.size ?? 1
+  const price = item.unit_cost ?? item.last_unit_cost
+  return price == null ? '' : String(Number((price * size).toFixed(2)))
+}
+
+/** Which price a purchase is evidence of: an item_packs id for an
+ * alternative size, or the item's own price for its default pack. */
+function packIdFor(row: DraftRow): string {
+  const alt = (row.item.alt_packs ?? []).find((p) => p.id === row.mode)
+  return alt ? alt.id : 'default'
+}
+
 /**
- * Recording stock you've received — a delivery from a supplier, or the initial
- * count when you first set the system up.
+ * Everything arriving, in one screen.
+ *
+ * This used to be two: "Add item" wrote down what a thing *is*, "Stock in"
+ * wrote down how many turned up. Which meant recording something you'd just
+ * bought for the first time took two screens and a trip between them, and it
+ * was never obvious which one you wanted. They're one action in the real
+ * world — something arrived — so they're one screen here. Type a name; if the
+ * system knows it you enter a quantity, and if it doesn't you fill in what it
+ * is first. Either way it lands in the same basket.
  *
  * This posts an ADD transaction, which is the only thing that increases what
- * the company owns. It is deliberately the same ledger the crew's check-outs
+ * the company owns. It's deliberately the same ledger the crew's check-outs
  * go into, so "what do we own" and "where is it" can never disagree.
  */
 export default function StockIn() {
@@ -49,7 +87,7 @@ export default function StockIn() {
   const [done, setDone] = useState<{ count: number; total: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
   // Set once someone chooses "create it" for a name nothing matched — shows
-  // the add-item panel right here instead of sending them away to do it.
+  // the new-item panel right here instead of sending them away to do it.
   const [creatingName, setCreatingName] = useState<string | null>(null)
 
   const chosen = new Set(rows.map((r) => r.item.item_id))
@@ -68,6 +106,18 @@ export default function StockIn() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items.data])
 
+  // "new" in the query string opens straight into defining something — the
+  // master sheet's Add stock button uses it when the shelf is empty.
+  useEffect(() => {
+    if (searchParams.get('new') === null) return
+    setCreatingName('')
+    setSearchParams((p) => {
+      p.delete('new')
+      return p
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const matches = useMemo(() => {
     if (!q.trim()) return []
     return (items.data ?? [])
@@ -77,27 +127,41 @@ export default function StockIn() {
   }, [q, items.data, rows])
 
   const totalValue = rows.reduce((sum, r) => sum + lineTotal(r), 0)
+  const newCount = rows.filter((r) => r.isNew).length
 
   /** Adding an item prefills what it usually costs and who it usually comes
    * from — a hint to edit, not a silent default — so re-ordering the same
    * thing doesn't mean retyping a price you already paid last time. */
   function addRow(item: ItemAvailability) {
     const mode = defaultMode(item)
-    const packSize = packOptions(item).find((o) => o.id === mode)?.size ?? 1
-    const packCost =
-      item.last_unit_cost != null ? String(Number((item.last_unit_cost * packSize).toFixed(2))) : ''
-
-    setRows((r) => [...r, { item, amount: '1', mode, packCost }])
+    setRows((r) => [...r, { item, amount: '1', mode, packCost: priceFor(item, mode) }])
     setQ('')
 
     if (!vendor.trim() && item.last_vendor) setVendor(item.last_vendor)
   }
 
-  /** A brand-new item created straight from Stock In drops right into the
-   * basket — no separate trip to the master sheet to add it first. */
+  /** Switching size has to switch price with it — a jug and a bottle are
+   * different money, and carrying the bottle's price over to the jug is
+   * exactly the mistake this is here to prevent. */
+  function onAmountChange(row: DraftRow, amount: string, mode: AmountMode) {
+    const sizeChanged = mode !== row.mode
+    update(row.item.item_id, {
+      amount,
+      mode,
+      ...(sizeChanged ? { packCost: priceFor(row.item, mode) } : {}),
+    })
+  }
+
+  /** A brand-new item defined here drops straight into the basket — that's
+   * the whole point of the two screens being one. */
   function onItemCreated(item: Parameters<typeof toItemAvailability>[0]) {
     const withStock = toItemAvailability(item, cats.data ?? [])
-    setRows((r) => [...r, { item: withStock, amount: '1', mode: defaultMode(withStock), packCost: '' }])
+    const mode = defaultMode(withStock)
+    const packSize = packOptions(withStock).find((o) => o.id === mode)?.size ?? 1
+    const packCost =
+      item.unit_cost != null ? String(Number((item.unit_cost * packSize).toFixed(2))) : ''
+
+    setRows((r) => [...r, { item: withStock, amount: '1', mode, packCost, isNew: true }])
     setCreatingName(null)
     setQ('')
     items.reload()
@@ -124,6 +188,7 @@ export default function StockIn() {
           item_id: r.item.item_id,
           qty,
           unit_cost: perBase,
+          pack_id: packIdFor(r),
           vendor: vendor.trim() || null,
         }
       })
@@ -142,22 +207,19 @@ export default function StockIn() {
 
   return (
     <div className="space-y-5 max-w-4xl">
-      <header>
-        <h1 className="text-xl font-semibold text-white">Stock in</h1>
-        <p className="text-sm text-ink-400">
-          Record gear you’ve bought or received. This is what increases the
-          quantity you own — everything else only moves it around.
-        </p>
-      </header>
+      <PageHeader
+        title="Add stock"
+        description="Anything that's arrived — a delivery, or the first count of something new. This is the only thing that increases what you own; everything else just moves it around."
+      />
 
       {done && (
-        <div className="rounded-lg border border-good-500/40 bg-good-500/10 p-3 text-sm">
-          <p className="text-good-500 font-medium">
+        <div className="rounded-lg border border-good-200 bg-good-50 p-3 text-sm">
+          <p className="text-good-700 font-medium">
             Added {done.count} item{done.count === 1 ? '' : 's'}
-            {done.total > 0 && ` · ₹${done.total.toLocaleString('en-IN')}`}
+            {done.total > 0 && ` · ${formatMoney(done.total)}`}
           </p>
-          <Link to="/admin" className="text-brand-400 underline">
-            See it on the master sheet
+          <Link to="/admin" className="text-brand-600 font-medium hover:text-brand-700">
+            See it on the master sheet →
           </Link>
         </div>
       )}
@@ -165,16 +227,16 @@ export default function StockIn() {
       <div className="card p-4 space-y-4">
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="space-y-1.5">
-            <span className="text-sm text-ink-400">Supplier (optional)</span>
+            <span className="block text-sm font-medium">Supplier (optional)</span>
             <input
               className="input"
               value={vendor}
               onChange={(e) => setVendor(e.target.value)}
-              placeholder="Sound Sales India"
+              placeholder="Metro Cash & Carry"
             />
           </label>
           <label className="space-y-1.5">
-            <span className="text-sm text-ink-400">Note (optional)</span>
+            <span className="block text-sm font-medium">Note (optional)</span>
             <input
               className="input"
               value={note}
@@ -185,49 +247,64 @@ export default function StockIn() {
         </div>
 
         <div className="space-y-1.5">
-          <span className="text-sm text-ink-400">Add items</span>
+          <span className="block text-sm font-medium">What arrived?</span>
           <input
             className="input"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search the master sheet…"
+            placeholder="Start typing a name…"
           />
-          {q.trim() && matches.length === 0 && !creatingName && (
-            <p className="text-sm text-ink-400">
-              Nothing matches “{q.trim()}”.{' '}
-              <button
-                type="button"
-                className="text-brand-400 underline"
-                onClick={() => setCreatingName(q.trim())}
-              >
-                Add it as a new item
-              </button>
-            </p>
-          )}
+
           {matches.length > 0 && (
-            <ul className="card divide-y divide-ink-800">
+            <ul className="card divide-y divide-line mt-1.5">
               {matches.map((m) => (
                 <li key={m.item_id}>
                   <button
-                    className="w-full text-left px-3 py-2 hover:bg-ink-850 flex justify-between gap-3"
+                    className="w-full text-left px-3 py-2.5 hover:bg-surface-hover flex justify-between gap-3 items-center"
                     onClick={() => addRow(m)}
                   >
-                    <span className="text-ink-200">{m.name}</span>
-                    <span className="text-xs text-ink-600 shrink-0">
-                      {formatPacks(m.qty_owned, m)} owned
+                    <span className="min-w-0">
+                      <span className="block text-sm">{m.name}</span>
+                      <span className="block text-xs text-fg-subtle">
+                        {formatQty(m.qty_owned, m)} owned
+                      </span>
                     </span>
+                    <span className="text-brand-600 text-lg shrink-0">+</span>
                   </button>
                 </li>
               ))}
             </ul>
           )}
+
+          {/* The whole reason this screen exists: a name the system has never
+              heard of is a normal thing to be holding, not an error. */}
+          {q.trim() && matches.length === 0 && creatingName === null && (
+            <div className="rounded-lg border border-line bg-surface-alt p-3 mt-1.5 space-y-2">
+              <p className="text-sm text-fg-muted">
+                Nothing called “{q.trim()}” yet.
+              </p>
+              <button
+                type="button"
+                className="btn btn-primary h-9 min-h-9 text-sm"
+                onClick={() => setCreatingName(q.trim())}
+              >
+                Set it up and add it
+              </button>
+            </div>
+          )}
+
+          {!q.trim() && creatingName === null && rows.length === 0 && (
+            <p className="text-xs text-fg-subtle pt-1">
+              Not on the list yet? Type its name and you can set it up here.
+            </p>
+          )}
         </div>
 
-        {creatingName && (
+        {creatingName !== null && (
           <ItemForm
             categories={cats.data ?? []}
             initialName={creatingName}
-            submitLabel="Add and load"
+            submitLabel="Set up and add"
             onCreated={onItemCreated}
             onCancel={() => setCreatingName(null)}
           />
@@ -240,17 +317,20 @@ export default function StockIn() {
             <li key={r.item.item_id} className="card p-3 space-y-2">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-white truncate">{r.item.name}</p>
+                  <p className="text-sm font-medium truncate flex items-center gap-2">
+                    {r.item.name}
+                    {r.isNew && <span className="badge badge-good">new</span>}
+                  </p>
                   {r.item.last_vendor && (
-                    <p className="text-xs text-ink-600">
+                    <p className="text-xs text-fg-subtle">
                       Last from {r.item.last_vendor}
                       {r.item.last_unit_cost != null &&
-                        ` · ₹${r.item.last_unit_cost.toLocaleString('en-IN')}/${r.item.unit}`}
+                        ` · ${formatMoney(r.item.last_unit_cost)}/${r.item.unit}`}
                     </p>
                   )}
                 </div>
                 <button
-                  className="text-ink-600 hover:text-bad-500 px-2"
+                  className="text-fg-subtle hover:text-bad-600 px-2"
                   onClick={() => remove(r.item.item_id)}
                   aria-label={`Remove ${r.item.name}`}
                 >
@@ -264,11 +344,11 @@ export default function StockIn() {
                   amount={r.amount}
                   mode={r.mode}
                   ariaLabel={`Quantity of ${r.item.name}`}
-                  onChange={(amount, mode) => update(r.item.item_id, { amount, mode })}
+                  onChange={(amount, mode) => onAmountChange(r, amount, mode)}
                 />
 
                 <label className="space-y-1.5">
-                  <span className="text-xs text-ink-400">Cost each</span>
+                  <span className="block text-xs text-fg-muted">Cost each</span>
                   <input
                     className="input tabular h-11 min-h-11 w-32"
                     type="number"
@@ -280,26 +360,36 @@ export default function StockIn() {
                   />
                 </label>
 
-                <p className="text-sm text-ink-400 pb-2.5">
-                  {r.packCost ? `= ₹${lineTotal(r).toLocaleString('en-IN')}` : ''}
+                <p className="text-sm text-fg-muted pb-2.5 tabular">
+                  {r.packCost ? `= ${formatMoney(lineTotal(r))}` : ''}
                 </p>
               </div>
+
+              {r.packCost && <PriceChangeHint row={r} />}
             </li>
           ))}
         </ul>
       )}
 
-      {error && <p className="text-sm text-bad-500">{error}</p>}
+      {rows.length === 0 && !q.trim() && creatingName === null && !done && (
+        <EmptyState
+          title="Nothing added yet"
+          hint="Search above for something you already stock, or type a new name to set it up."
+        />
+      )}
+
+      {error && <ErrorText>{error}</ErrorText>}
 
       {rows.length > 0 && (
-        <div className="flex flex-wrap items-center gap-3 justify-between">
-          <p className="text-sm text-ink-400">
+        <div className="card p-3 flex flex-wrap items-center gap-3 justify-between sticky bottom-4">
+          <p className="text-sm text-fg-muted">
             {rows.length} line{rows.length === 1 ? '' : 's'}
+            {newCount > 0 && ` · ${newCount} new`}
             {totalValue > 0 && (
               <>
                 {' · '}
-                <span className="text-white tabular">
-                  ₹{totalValue.toLocaleString('en-IN')}
+                <span className="font-semibold text-fg tabular">
+                  {formatMoney(totalValue)}
                 </span>
               </>
             )}
@@ -310,5 +400,34 @@ export default function StockIn() {
         </div>
       )}
     </div>
+  )
+}
+
+/**
+ * Prices move, and the moment you notice is when you're typing the new one.
+ * Saying so here — before it's saved — is the difference between a price
+ * change you meant and a typo you didn't.
+ */
+function PriceChangeHint({ row }: { row: DraftRow }) {
+  // Compare like with like: the price already on file for the size that's
+  // actually selected, not the item's headline price.
+  const oldPack = Number(priceFor(row.item, row.mode)) || 0
+  const newPack = Number(row.packCost) || 0
+  const sizeName =
+    packOptions(row.item).find((o) => o.id === row.mode)?.label ?? row.item.unit
+
+  if (oldPack <= 0 || newPack <= 0) return null
+
+  const diff = newPack - oldPack
+  if (Math.abs(diff) < 0.01) return null
+
+  const pct = Math.round((diff / oldPack) * 100)
+  const up = diff > 0
+
+  return (
+    <p className={`text-xs ${up ? 'text-warn-700' : 'text-good-700'}`}>
+      {up ? 'Up' : 'Down'} from {formatMoney(oldPack)} per {sizeName} — {up ? '+' : ''}
+      {pct}%. Saving this updates the price for that size.
+    </p>
   )
 }

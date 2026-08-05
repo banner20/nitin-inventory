@@ -12,7 +12,7 @@ import {
   type AmountMode,
 } from '@/components/AmountInput'
 import {
-  formatPacks,
+  formatQty,
   itemMatches,
   toItemAvailability,
   type EventRecord,
@@ -176,8 +176,8 @@ export default function TakeOut() {
     <div className="space-y-4 pb-28">
       <header className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xs text-ink-400">Taking out for</p>
-          <h1 className="font-semibold text-white truncate">{event.name}</h1>
+          <p className="text-xs text-fg-muted">Taking out for</p>
+          <h1 className="font-semibold text-fg truncate">{event.name}</h1>
         </div>
         <button className="btn btn-ghost h-9 min-h-9 text-sm px-3" onClick={() => setEvent(null)}>
           Change
@@ -198,7 +198,7 @@ export default function TakeOut() {
           className={
             'shrink-0 size-11 min-h-11 rounded-lg flex items-center justify-center transition-colors ' +
             (voice.recording
-              ? 'bg-bad-500 text-white animate-pulse'
+              ? 'bg-bad-600 text-white animate-pulse'
               : 'btn btn-ghost px-0')
           }
           onClick={() => (voice.recording ? void handleVoiceStop() : void voice.start())}
@@ -217,20 +217,20 @@ export default function TakeOut() {
         </button>
       </div>
 
-      {voice.error && <p className="text-sm text-bad-500">{voice.error}</p>}
+      {voice.error && <p className="text-sm text-bad-600">{voice.error}</p>}
 
       {voiceResult && (
         <div className="card p-3 space-y-1.5 text-sm">
-          <p className="text-ink-400">
-            Heard: <span className="text-ink-200">“{voiceResult.heard}”</span>
+          <p className="text-fg-muted">
+            Heard: <span className="text-fg">“{voiceResult.heard}”</span>
           </p>
           {voiceResult.unmatched.length > 0 && (
-            <p className="text-warn-500">
+            <p className="text-warn-600">
               Couldn't match: {voiceResult.unmatched.join(', ')} — add these by search instead.
             </p>
           )}
           <button
-            className="text-xs text-brand-400 underline"
+            className="text-xs text-brand-600 underline"
             onClick={() => setVoiceResult(null)}
           >
             Dismiss
@@ -239,23 +239,23 @@ export default function TakeOut() {
       )}
 
       {matches.length > 0 && (
-        <ul className="card divide-y divide-ink-800">
+        <ul className="card divide-y divide-line">
           {matches.map((m) => (
             <li key={m.item_id}>
               <button
-                className="w-full text-left px-3 py-3 hover:bg-ink-850 flex justify-between gap-3 items-center"
+                className="w-full text-left px-3 py-3 hover:bg-surface-hover flex justify-between gap-3 items-center"
                 onClick={() => {
                   setBasket((b) => [...b, { item: m, amount: '1', mode: defaultMode(m), looseAmount: '' }])
                   setQ('')
                 }}
               >
                 <span className="min-w-0">
-                  <span className="block text-ink-200 truncate">{m.name}</span>
-                  <span className="block text-xs text-ink-600">
-                    {formatPacks(m.qty_available, m)} available
+                  <span className="block text-fg truncate">{m.name}</span>
+                  <span className="block text-xs text-fg-subtle">
+                    {formatQty(m.qty_available, m)} available
                   </span>
                 </span>
-                <span className="text-brand-400 text-xl shrink-0">+</span>
+                <span className="text-brand-600 text-xl shrink-0">+</span>
               </button>
             </li>
           ))}
@@ -264,7 +264,7 @@ export default function TakeOut() {
 
       {q.trim() && matches.length === 0 && (
         <div className="card p-3 space-y-2">
-          <p className="text-sm text-ink-400">
+          <p className="text-sm text-fg-muted">
             Nothing matches “{q.trim()}” — not on the master sheet yet.
           </p>
           <button
@@ -274,32 +274,32 @@ export default function TakeOut() {
           >
             {quickAdding ? 'Adding…' : `Quick add "${q.trim()}" and take it out`}
           </button>
-          <p className="text-xs text-ink-600">
+          <p className="text-xs text-fg-subtle">
             A manager can fill in its category and pack size later from the master sheet.
           </p>
-          {quickAddError && <p className="text-xs text-bad-500">{quickAddError}</p>}
+          {quickAddError && <p className="text-xs text-bad-600">{quickAddError}</p>}
         </div>
       )}
 
       {basket.length === 0 ? (
-        <div className="card p-6 text-center text-sm text-ink-400">
+        <div className="card p-6 text-center text-sm text-fg-muted">
           Search above to start loading.
         </div>
       ) : (
-        <ul className="card divide-y divide-ink-800">
+        <ul className="card divide-y divide-line">
           {basket.map((row) => {
             const short = toBase(row) > Number(row.item.qty_available)
             return (
               <li key={row.item.item_id} className="p-3 space-y-2">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-white truncate">{row.item.name}</p>
-                    <p className="text-xs text-ink-600">
-                      {formatPacks(row.item.qty_available, row.item)} available
+                    <p className="text-sm truncate">{row.item.name}</p>
+                    <p className="text-xs text-fg-subtle">
+                      {formatQty(row.item.qty_available, row.item)} available
                     </p>
                   </div>
                   <button
-                    className="text-ink-600 hover:text-bad-500 px-2"
+                    className="text-fg-subtle hover:text-bad-600 px-2"
                     onClick={() =>
                       setBasket((b) => b.filter((x) => x.item.item_id !== row.item.item_id))
                     }
@@ -310,7 +310,7 @@ export default function TakeOut() {
                 </div>
 
                 <div className="space-y-1">
-                  <span className="text-xs text-ink-400">Full bottles</span>
+                  <span className="text-xs text-fg-muted">Full bottles</span>
                   <AmountInput
                     item={row.item}
                     amount={row.amount}
@@ -324,12 +324,12 @@ export default function TakeOut() {
                 {Number(row.item.qty_loose) > 0 && (
                   <div className="space-y-1">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs text-ink-400">
-                        Plus loose ({formatPacks(row.item.qty_loose, row.item)} left)
+                      <span className="text-xs text-fg-muted">
+                        Plus loose ({formatQty(row.item.qty_loose, row.item)} left)
                       </span>
                       <button
                         type="button"
-                        className="text-xs text-brand-400 underline"
+                        className="text-xs text-brand-600 underline"
                         onClick={() =>
                           patch(row.item.item_id, {
                             looseAmount: String(Number(row.item.qty_loose)),
@@ -359,14 +359,14 @@ export default function TakeOut() {
                         }}
                         aria-label={`Loose amount of ${row.item.name}`}
                       />
-                      <span className="text-sm text-ink-400">{row.item.unit}</span>
+                      <span className="text-sm text-fg-muted">{row.item.unit}</span>
                     </div>
                   </div>
                 )}
 
                 {short && (
-                  <p className="text-xs text-warn-500">
-                    More than the {formatPacks(row.item.qty_available, row.item)} on record.
+                  <p className="text-xs text-warn-600">
+                    More than the {formatQty(row.item.qty_available, row.item)} on record.
                     You can still take it — the count may just be behind.
                   </p>
                 )}
@@ -376,10 +376,10 @@ export default function TakeOut() {
         </ul>
       )}
 
-      {error && <p className="text-sm text-bad-500">{error}</p>}
+      {error && <p className="text-sm text-bad-600">{error}</p>}
 
       {basket.length > 0 && (
-        <div className="fixed bottom-16 inset-x-0 p-3 bg-ink-950/95 backdrop-blur border-t border-ink-800">
+        <div className="fixed bottom-16 inset-x-0 p-3 bg-surface/95 backdrop-blur border-t border-line">
           <button className="btn btn-primary w-full" onClick={() => void post()} disabled={busy}>
             {busy ? 'Saving…' : `Take out ${basket.length} item${basket.length === 1 ? '' : 's'}`}
           </button>
@@ -407,15 +407,15 @@ function EventStep({
   return (
     <div className="space-y-4">
       <header>
-        <h1 className="text-lg font-semibold text-white">Taking stock out</h1>
-        <p className="text-sm text-ink-400">Which event is this for?</p>
+        <h1 className="text-lg font-semibold">Taking stock out</h1>
+        <p className="text-sm text-fg-muted">Which event is this for?</p>
       </header>
 
-      {loading && <p className="text-sm text-ink-400">Loading…</p>}
-      {error && <p className="text-sm text-bad-500">{error.message}</p>}
+      {loading && <p className="text-sm text-fg-muted">Loading…</p>}
+      {error && <p className="text-sm text-bad-600">{error.message}</p>}
 
       {!loading && events.length === 0 && !adding && (
-        <div className="card p-5 text-center text-sm text-ink-400">
+        <div className="card p-5 text-center text-sm text-fg-muted">
           No events are open. Create one below to get loading.
         </div>
       )}
@@ -427,8 +427,8 @@ function EventStep({
               className="card w-full text-left p-4 hover:border-brand-500 transition-colors"
               onClick={() => onPick(e)}
             >
-              <p className="font-medium text-white">{e.name}</p>
-              <p className="text-sm text-ink-400">
+              <p className="font-medium text-fg">{e.name}</p>
+              <p className="text-sm text-fg-muted">
                 {e.venue ? `${e.venue} · ` : ''}
                 {new Date(e.starts_at).toLocaleDateString('en-IN', {
                   day: 'numeric',
@@ -490,10 +490,10 @@ function QuickEventForm({
 
   return (
     <form onSubmit={submit} className="card p-4 space-y-3">
-      <h2 className="font-semibold text-white">New event</h2>
+      <h2 className="text-sm font-semibold">New event</h2>
 
       <label className="space-y-1.5 block">
-        <span className="text-sm text-ink-400">What's the job?</span>
+        <span className="text-sm text-fg-muted">What's the job?</span>
         <input
           className="input"
           value={name}
@@ -505,7 +505,7 @@ function QuickEventForm({
       </label>
 
       <div className="space-y-1.5">
-        <span className="text-sm text-ink-400">Back by</span>
+        <span className="text-sm text-fg-muted">Back by</span>
         <div className="grid grid-cols-3 gap-2">
           {[
             { d: 1, label: 'Tomorrow' },
@@ -524,12 +524,12 @@ function QuickEventForm({
             </button>
           ))}
         </div>
-        <p className="text-xs text-ink-600">
+        <p className="text-xs text-fg-subtle">
           This is only what makes stock show as overdue — a manager can change it.
         </p>
       </div>
 
-      {error && <p className="text-sm text-bad-500">{error}</p>}
+      {error && <p className="text-sm text-bad-600">{error}</p>}
 
       <div className="flex gap-2">
         <button type="submit" className="btn btn-primary flex-1" disabled={busy || !name.trim()}>

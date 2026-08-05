@@ -122,7 +122,7 @@ export function AmountInput({
       <div className="flex items-center gap-2 flex-wrap">
         {options.length > 0 ? (
           <div
-            className="inline-flex rounded-lg border border-ink-700 overflow-hidden flex-wrap"
+            className="inline-flex rounded-lg border border-line overflow-hidden flex-wrap"
             role="group"
             aria-label="Size"
           >
@@ -134,8 +134,8 @@ export function AmountInput({
                 className={clsx(
                   'px-3 py-1.5 min-h-11 text-sm font-medium transition-colors whitespace-nowrap leading-tight',
                   mode === o.id
-                    ? 'bg-brand-500 text-ink-950'
-                    : 'text-ink-400 hover:text-ink-200',
+                    ? 'bg-brand-500 text-white'
+                    : 'text-fg-muted hover:text-fg',
                 )}
               >
                 <span className="block">{formatSize(o.size, item.unit)}</span>
@@ -147,14 +147,14 @@ export function AmountInput({
               onClick={() => switchMode(BASE)}
               className={clsx(
                 'px-3 min-h-11 text-sm font-medium transition-colors',
-                mode === BASE ? 'bg-brand-500 text-ink-950' : 'text-ink-400 hover:text-ink-200',
+                mode === BASE ? 'bg-brand-500 text-white' : 'text-fg-muted hover:text-fg',
               )}
             >
               {item.unit}
             </button>
           </div>
         ) : (
-          <span className="text-sm text-ink-400">{item.unit}</span>
+          <span className="text-sm text-fg-muted">{item.unit}</span>
         )}
 
         {withSteppers && (
@@ -192,7 +192,7 @@ export function AmountInput({
       </div>
 
       {Number(amount) > 0 && (
-        <p className="text-xs text-ink-600 tabular">
+        <p className="text-xs text-fg-subtle tabular">
           {currentOpt
             ? `= ${amountToBase(amount, mode, item).toLocaleString('en-IN')} ${item.unit}`
             : options.length === 1

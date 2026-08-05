@@ -14,11 +14,11 @@ const TYPE_LABEL: Record<TxnType, string> = {
 }
 
 const TYPE_COLOR: Record<TxnType, string> = {
-  OUT: 'text-brand-400',
-  IN: 'text-good-500',
-  ADD: 'text-good-500',
-  WRITEOFF: 'text-bad-500',
-  REPAIR: 'text-warn-500',
+  OUT: 'text-brand-600',
+  IN: 'text-good-600',
+  ADD: 'text-good-600',
+  WRITEOFF: 'text-bad-600',
+  REPAIR: 'text-warn-600',
 }
 
 const CONDITION_LABEL: Record<string, string> = {
@@ -92,8 +92,8 @@ export default function History() {
   return (
     <div className="space-y-5 max-w-4xl">
       <header>
-        <h1 className="text-xl font-semibold text-white">History</h1>
-        <p className="text-sm text-ink-400">
+        <h1 className="text-lg font-semibold">History</h1>
+        <p className="text-sm text-fg-muted">
           Every stock action, newest first — who took what, brought what back, and what was
           bought or written off.
         </p>
@@ -120,10 +120,10 @@ export default function History() {
         </select>
       </div>
 
-      {error && <p className="text-sm text-bad-500">{error}</p>}
+      {error && <p className="text-sm text-bad-600">{error}</p>}
 
       {visible.length === 0 && !loading && (
-        <div className="card p-6 text-center text-sm text-ink-400">
+        <div className="card p-6 text-center text-sm text-fg-muted">
           {needle ? 'Nothing matches that search.' : 'No stock actions recorded yet.'}
         </div>
       )}
@@ -136,7 +136,7 @@ export default function History() {
         </ul>
       )}
 
-      {loading && <p className="text-sm text-ink-400">Loading…</p>}
+      {loading && <p className="text-sm text-fg-muted">Loading…</p>}
 
       {!loading && hasMore && !needle && (
         <button className="btn btn-ghost w-full" onClick={() => setPage((p) => p + 1)}>
@@ -161,13 +161,13 @@ function HistoryRow({ entry }: { entry: TxnHistoryEntry }) {
           <span className={`font-semibold ${TYPE_COLOR[entry.type]}`}>
             {TYPE_LABEL[entry.type]}
           </span>{' '}
-          <span className="text-ink-400">
+          <span className="text-fg-muted">
             · {who}
             {forWhom && ` on behalf of ${forWhom}`}
             {entry.event_name && ` · ${entry.event_name}`}
           </span>
         </p>
-        <time className="text-xs text-ink-600 shrink-0">
+        <time className="text-xs text-fg-subtle shrink-0">
           {new Date(entry.occurred_at).toLocaleString('en-IN', {
             day: 'numeric',
             month: 'short',
@@ -177,21 +177,21 @@ function HistoryRow({ entry }: { entry: TxnHistoryEntry }) {
         </time>
       </div>
 
-      {entry.note && <p className="text-sm text-ink-400 italic">“{entry.note}”</p>}
+      {entry.note && <p className="text-sm text-fg-muted italic">“{entry.note}”</p>}
 
       {entry.lines && entry.lines.length > 0 && (
-        <ul className="text-sm divide-y divide-ink-800 border-t border-ink-800 -mx-4 px-4">
+        <ul className="text-sm divide-y divide-line border-t border-line -mx-4 px-4">
           {entry.lines.map((line, i) => (
             <li key={i} className="py-1.5 flex items-center justify-between gap-3">
-              <span className="text-ink-200 truncate">{line.item_name}</span>
-              <span className="text-ink-400 tabular shrink-0 flex items-center gap-2">
+              <span className="text-sm truncate">{line.item_name}</span>
+              <span className="text-fg-muted tabular shrink-0 flex items-center gap-2">
                 {formatPacks(line.qty, line)}
                 {line.condition && line.condition !== 'ok' && (
-                  <span className="text-xs text-warn-500">
+                  <span className="text-xs text-warn-600">
                     {CONDITION_LABEL[line.condition] ?? line.condition}
                   </span>
                 )}
-                {line.vendor && <span className="text-xs text-ink-600">· {line.vendor}</span>}
+                {line.vendor && <span className="text-xs text-fg-subtle">· {line.vendor}</span>}
               </span>
             </li>
           ))}

@@ -14,12 +14,10 @@ export default function Placeholder({
   return (
     <div className="card p-6 space-y-2 max-w-xl">
       <div className="flex items-center gap-2">
-        <h2 className="text-lg font-semibold text-white">{title}</h2>
-        <span className="text-[11px] uppercase tracking-wide font-semibold text-ink-950 bg-warn-500 rounded px-1.5 py-0.5">
-          {milestone}
-        </span>
+        <h2 className="text-lg font-semibold">{title}</h2>
+        <span className="badge badge-warn uppercase tracking-wide">{milestone}</span>
       </div>
-      <p className="text-sm text-ink-400">
+      <p className="text-sm text-fg-muted">
         {children ?? 'Not built yet.'}
       </p>
     </div>

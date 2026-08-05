@@ -17,6 +17,14 @@ export interface PostLine {
   /** OUT only: draw from this item's loose (opened, partial) pool instead of sealed stock. */
   from_loose?: boolean
   unit_cost?: number | null
+  /**
+   * ADD only: which pack size this was bought in — an item_packs id, or
+   * 'default' for the item's primary pack. Not stored on the line (the
+   * ledger stays in base units); it only says which size's price this
+   * purchase is evidence of, so buying a cheap bulk jug doesn't overwrite
+   * the price of a single bottle.
+   */
+  pack_id?: string | null
   vendor?: string | null
   note?: string | null
 }
@@ -76,10 +84,16 @@ export interface NewItemInput {
   packLabel?: string | null
   /** Null clears it, undefined leaves it unchanged (only matters for update). */
   expiryDate?: string | null
+  /**
+   * Price of one base unit. Normally this looks after itself — stocking
+   * something in at a new price updates it — so it's only set here for an
+   * opening balance or to correct a figure by hand.
+   */
+  unitCost?: number | null
 }
 
 const ITEM_COLUMNS =
-  'id, name, category_id, unit, sku, min_stock, aliases, photo_url, notes, active, kind, pack_size, pack_label, expiry_date'
+  'id, name, category_id, unit, sku, min_stock, aliases, photo_url, notes, active, kind, pack_size, pack_label, expiry_date, unit_cost'
 
 export async function createItem(input: NewItemInput): Promise<Item> {
   const { data, error } = await supabase
@@ -95,6 +109,7 @@ export async function createItem(input: NewItemInput): Promise<Item> {
       pack_size: input.packSize && input.packSize > 0 ? input.packSize : 1,
       pack_label: input.packLabel?.trim() || null,
       expiry_date: input.expiryDate || null,
+      unit_cost: input.unitCost ?? null,
     })
     .select(ITEM_COLUMNS)
     .single()
@@ -120,6 +135,7 @@ export async function updateItem(id: string, patch: Partial<NewItemInput>): Prom
   if (patch.packSize !== undefined) body.pack_size = patch.packSize > 0 ? patch.packSize : 1
   if (patch.packLabel !== undefined) body.pack_label = patch.packLabel?.trim() || null
   if (patch.expiryDate !== undefined) body.expiry_date = patch.expiryDate || null
+  if (patch.unitCost !== undefined) body.unit_cost = patch.unitCost
 
   const { error } = await supabase.from('items').update(body).eq('id', id)
   if (error) throw new Error(error.message)
@@ -132,7 +148,7 @@ export async function updateItem(id: string, patch: Partial<NewItemInput>): Prom
  */
 export async function setItemPacks(
   itemId: string,
-  packs: { packSize: number; packLabel: string }[],
+  packs: { packSize: number; packLabel: string; unitCost?: number | null }[],
 ): Promise<void> {
   const { error: delErr } = await supabase.from('item_packs').delete().eq('item_id', itemId)
   if (delErr) throw new Error(delErr.message)
@@ -143,6 +159,7 @@ export async function setItemPacks(
       item_id: itemId,
       pack_size: p.packSize,
       pack_label: p.packLabel.trim(),
+      unit_cost: p.unitCost ?? null,
       sort: i,
     }))
   if (rows.length === 0) return

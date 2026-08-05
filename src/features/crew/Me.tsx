@@ -35,15 +35,15 @@ export default function Me() {
   return (
     <div className="space-y-5">
       <section className="card p-4 space-y-1">
-        <p className="text-lg font-semibold text-white">{profile?.full_name}</p>
-        <p className="text-sm text-ink-400">
+        <p className="text-lg font-semibold">{profile?.full_name}</p>
+        <p className="text-sm text-fg-muted">
           {profile?.emp_code} · <span className="capitalize">{profile?.role}</span>
         </p>
-        {profile?.phone && <p className="text-sm text-ink-400">{profile.phone}</p>}
+        {profile?.phone && <p className="text-sm text-fg-muted">{profile.phone}</p>}
       </section>
 
       <section className="card p-4 space-y-3">
-        <h2 className="font-semibold text-white">Change password</h2>
+        <h2 className="text-sm font-semibold">Change password</h2>
         <form onSubmit={onChangePassword} className="space-y-3">
           <input
             className="input"
@@ -64,7 +64,7 @@ export default function Me() {
             onChange={(e) => setConfirm(e.target.value)}
           />
           {msg && (
-            <p className={msg.kind === 'ok' ? 'text-sm text-good-500' : 'text-sm text-bad-500'}>
+            <p className={msg.kind === 'ok' ? 'text-sm text-good-600' : 'text-sm text-bad-600'}>
               {msg.text}
             </p>
           )}

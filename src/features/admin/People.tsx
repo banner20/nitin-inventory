@@ -30,8 +30,8 @@ export default function People() {
   return (
     <div className="space-y-6 max-w-5xl">
       <header>
-        <h1 className="text-xl font-semibold text-white">People</h1>
-        <p className="text-sm text-ink-400">
+        <h1 className="text-lg font-semibold">People</h1>
+        <p className="text-sm text-fg-muted">
           Accounts are created here. Nobody can sign themselves up.
         </p>
       </header>
@@ -40,8 +40,8 @@ export default function People() {
         <p
           className={
             banner.kind === 'ok'
-              ? 'text-sm text-good-500'
-              : 'text-sm text-bad-500'
+              ? 'text-sm text-good-600'
+              : 'text-sm text-bad-600'
           }
         >
           {banner.text}
@@ -57,15 +57,15 @@ export default function People() {
       />
 
       <section className="space-y-3">
-        <h2 className="font-semibold text-white">
-          Everyone {!loading && <span className="text-ink-400 font-normal">({people.length})</span>}
+        <h2 className="text-sm font-semibold">
+          Everyone {!loading && <span className="text-fg-muted font-normal">({people.length})</span>}
         </h2>
 
-        {loading && <p className="text-sm text-ink-400">Loading…</p>}
-        {error && <p className="text-sm text-bad-500">Couldn’t load people. {error.message}</p>}
+        {loading && <p className="text-sm text-fg-muted">Loading…</p>}
+        {error && <p className="text-sm text-bad-600">Couldn’t load people. {error.message}</p>}
 
         {people.length > 0 && (
-          <div className="card divide-y divide-ink-800">
+          <div className="card divide-y divide-line">
             {people.map((p) => (
               <PersonRow
                 key={p.id}
@@ -119,11 +119,11 @@ function CreateUserForm({
 
   return (
     <form onSubmit={onSubmit} className="card p-4 space-y-4">
-      <h2 className="font-semibold text-white">Add someone</h2>
+      <h2 className="text-sm font-semibold">Add someone</h2>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="space-y-1.5">
-          <span className="text-sm text-ink-400">Full name</span>
+          <span className="text-sm text-fg-muted">Full name</span>
           <input
             className="input"
             value={fullName}
@@ -134,7 +134,7 @@ function CreateUserForm({
         </label>
 
         <label className="space-y-1.5">
-          <span className="text-sm text-ink-400">Employee code (their username)</span>
+          <span className="text-sm text-fg-muted">Employee code (their username)</span>
           <input
             className="input uppercase"
             value={empCode}
@@ -148,7 +148,7 @@ function CreateUserForm({
         </label>
 
         <label className="space-y-1.5">
-          <span className="text-sm text-ink-400">Password</span>
+          <span className="text-sm text-fg-muted">Password</span>
           <input
             className="input"
             value={password}
@@ -161,7 +161,7 @@ function CreateUserForm({
         </label>
 
         <label className="space-y-1.5">
-          <span className="text-sm text-ink-400">Phone (optional)</span>
+          <span className="text-sm text-fg-muted">Phone (optional)</span>
           <input
             className="input"
             value={phone}
@@ -173,7 +173,7 @@ function CreateUserForm({
       </div>
 
       <fieldset className="space-y-2">
-        <legend className="text-sm text-ink-400 mb-1">Role</legend>
+        <legend className="text-sm text-fg-muted mb-1">Role</legend>
         <div className="grid gap-2 sm:grid-cols-3">
           {ROLES.map((r) => (
             <label
@@ -181,8 +181,8 @@ function CreateUserForm({
               className={
                 'flex gap-2 p-3 rounded-lg border cursor-pointer transition-colors ' +
                 (role === r
-                  ? 'border-brand-500 bg-ink-850'
-                  : 'border-ink-700 hover:border-ink-600')
+                  ? 'border-brand-500 bg-surface-hover'
+                  : 'border-line hover:border-line-strong')
               }
             >
               <input
@@ -193,15 +193,15 @@ function CreateUserForm({
                 onChange={() => setRole(r)}
               />
               <span className="min-w-0">
-                <span className="block text-sm font-medium text-white capitalize">{r}</span>
-                <span className="block text-xs text-ink-400">{ROLE_HELP[r]}</span>
+                <span className="block text-sm font-medium text-fg capitalize">{r}</span>
+                <span className="block text-xs text-fg-muted">{ROLE_HELP[r]}</span>
               </span>
             </label>
           ))}
         </div>
       </fieldset>
 
-      <p className="text-xs text-ink-600">
+      <p className="text-xs text-fg-subtle">
         Write the password down before you submit — it is hashed on save and
         can’t be read back, only reset.
       </p>
@@ -248,14 +248,14 @@ function PersonRow({
     <div className="p-3 space-y-3">
       <div className="flex flex-wrap items-center gap-3 justify-between">
         <div className="min-w-0">
-          <p className="font-medium text-white truncate">
+          <p className="font-medium text-sm truncate">
             {person.full_name}
-            {isSelf && <span className="text-ink-600 font-normal"> · you</span>}
+            {isSelf && <span className="text-fg-subtle font-normal"> · you</span>}
             {!person.active && (
-              <span className="ml-2 text-xs font-semibold text-warn-500">Deactivated</span>
+              <span className="ml-2 text-xs font-semibold text-warn-600">Deactivated</span>
             )}
           </p>
-          <p className="text-xs text-ink-400">
+          <p className="text-xs text-fg-muted">
             {person.emp_code}
             {person.phone ? ` · ${person.phone}` : ''}
           </p>
@@ -293,8 +293,8 @@ function PersonRow({
             <button
               className={
                 person.active
-                  ? 'btn btn-ghost h-9 min-h-9 text-sm px-3 text-warn-500'
-                  : 'btn btn-ghost h-9 min-h-9 text-sm px-3 text-good-500'
+                  ? 'btn btn-ghost h-9 min-h-9 text-sm px-3 text-warn-600'
+                  : 'btn btn-ghost h-9 min-h-9 text-sm px-3 text-good-600'
               }
               disabled={busy}
               onClick={() =>

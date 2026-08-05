@@ -32,8 +32,8 @@ export default function ConflictQueue() {
   return (
     <div className="space-y-8 max-w-4xl">
       <header>
-        <h1 className="text-xl font-semibold text-white">Conflicts</h1>
-        <p className="text-sm text-ink-400">
+        <h1 className="text-lg font-semibold">Conflicts</h1>
+        <p className="text-sm text-fg-muted">
           Everything that needs a manager's eyes, in one list.
         </p>
       </header>
@@ -73,7 +73,7 @@ export default function ConflictQueue() {
         totalReview === 0 &&
         totalOverdue === 0 &&
         totalExpiring === 0 && (
-          <div className="card p-6 text-center text-sm text-ink-400">
+          <div className="card p-6 text-center text-sm text-fg-muted">
             Nothing needs attention right now.
           </div>
         )}
@@ -96,29 +96,29 @@ function ExpiringSection({
 }) {
   return (
     <section className="space-y-3">
-      <h2 className="font-semibold text-white">
+      <h2 className="text-sm font-semibold">
         Expiring soon {items.length > 0 && `(${items.length})`}
       </h2>
-      <p className="text-sm text-ink-400">
+      <p className="text-sm text-fg-muted">
         Within 60 days, or already past. Sort out what's still good before it becomes waste.
       </p>
 
-      {loading && <p className="text-sm text-ink-400">Loading…</p>}
-      {error && <p className="text-sm text-bad-500">{error.message}</p>}
+      {loading && <p className="text-sm text-fg-muted">Loading…</p>}
+      {error && <p className="text-sm text-bad-600">{error.message}</p>}
 
       {!loading && items.length === 0 && (
-        <div className="card p-4 text-sm text-ink-400">Nothing expiring soon.</div>
+        <div className="card p-4 text-sm text-fg-muted">Nothing expiring soon.</div>
       )}
 
       {items.length > 0 && (
-        <ul className="card divide-y divide-ink-800">
+        <ul className="card divide-y divide-line">
           {items.map((i) => {
             const expired = new Date(i.expiry_date!).getTime() < Date.now()
             return (
               <li key={i.item_id} className="p-3 flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-white truncate">{i.name}</p>
-                  <p className={`text-xs ${expired ? 'text-bad-500' : 'text-warn-500'}`}>
+                  <p className="text-sm truncate">{i.name}</p>
+                  <p className={`text-xs ${expired ? 'text-bad-600' : 'text-warn-600'}`}>
                     {expired ? 'Expired' : 'Expires'}{' '}
                     {new Date(i.expiry_date!).toLocaleDateString('en-IN', {
                       day: 'numeric',
@@ -165,18 +165,18 @@ function DuplicatesSection({
 
   return (
     <section className="space-y-3">
-      <h2 className="font-semibold text-white">
+      <h2 className="text-sm font-semibold">
         Possible duplicate items {candidates.length > 0 && `(${candidates.length})`}
       </h2>
-      <p className="text-sm text-ink-400">
+      <p className="text-sm text-fg-muted">
         Items whose names look like the same thing typed two different ways.
       </p>
 
-      {loading && <p className="text-sm text-ink-400">Loading…</p>}
-      {error && <p className="text-sm text-bad-500">{error.message}</p>}
+      {loading && <p className="text-sm text-fg-muted">Loading…</p>}
+      {error && <p className="text-sm text-bad-600">{error.message}</p>}
 
       {!loading && candidates.length === 0 && (
-        <div className="card p-4 text-sm text-ink-400">No likely duplicates found.</div>
+        <div className="card p-4 text-sm text-fg-muted">No likely duplicates found.</div>
       )}
 
       {candidates.length > 0 && (
@@ -233,11 +233,11 @@ function DuplicateRow({
         <ItemSummary label={candidate.item_b_name} item={b} />
       </div>
 
-      {error && <p className="text-sm text-bad-500">{error}</p>}
+      {error && <p className="text-sm text-bad-600">{error}</p>}
 
       {confirming ? (
-        <div className="rounded-lg border border-warn-500/40 bg-warn-500/10 p-3 space-y-2">
-          <p className="text-sm text-ink-200">
+        <div className="rounded-lg border border-warn-200 bg-warn-50 p-3 space-y-2">
+          <p className="text-sm text-fg">
             Keep <strong>{confirming === 'a' ? candidate.item_a_name : candidate.item_b_name}</strong>{' '}
             and fold <strong>{confirming === 'a' ? candidate.item_b_name : candidate.item_a_name}</strong>{' '}
             into it? All its history moves over; it's kept in the records but hidden from the
@@ -264,7 +264,7 @@ function DuplicateRow({
           <button className="btn btn-ghost text-sm" onClick={() => setConfirming('b')}>
             Keep “{candidate.item_b_name}”
           </button>
-          <span className="text-xs text-ink-600 self-center ml-auto">
+          <span className="text-xs text-fg-subtle self-center ml-auto">
             {Math.round(candidate.similarity * 100)}% alike
           </span>
         </div>
@@ -276,9 +276,9 @@ function DuplicateRow({
 function ItemSummary({ label, item }: { label: string; item?: ItemAvailability }) {
   return (
     <div className="min-w-0">
-      <p className="text-white truncate">{label}</p>
+      <p className="text-sm truncate">{label}</p>
       {item && (
-        <p className="text-xs text-ink-400">
+        <p className="text-xs text-fg-muted">
           {formatPacks(item.qty_owned, item)} owned · {item.category_name ?? 'Uncategorised'}
         </p>
       )}
@@ -301,31 +301,31 @@ function NeedsReviewSection({
 }) {
   return (
     <section className="space-y-3">
-      <h2 className="font-semibold text-white">
+      <h2 className="text-sm font-semibold">
         Stock that doesn't add up {items.length > 0 && `(${items.length})`}
       </h2>
-      <p className="text-sm text-ink-400">
+      <p className="text-sm text-fg-muted">
         More has gone out than was ever recorded coming in. Usually means the opening
         count or a delivery was never entered — add it through Stock in and this
         clears on its own.
       </p>
 
-      {loading && <p className="text-sm text-ink-400">Loading…</p>}
-      {error && <p className="text-sm text-bad-500">{error.message}</p>}
+      {loading && <p className="text-sm text-fg-muted">Loading…</p>}
+      {error && <p className="text-sm text-bad-600">{error.message}</p>}
 
       {!loading && items.length === 0 && (
-        <div className="card p-4 text-sm text-ink-400">
+        <div className="card p-4 text-sm text-fg-muted">
           Nothing — every item's numbers add up.
         </div>
       )}
 
       {items.length > 0 && (
-        <ul className="card divide-y divide-ink-800">
+        <ul className="card divide-y divide-line">
           {items.map((i) => (
             <li key={i.item_id} className="p-3 flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-white truncate">{i.name}</p>
-                <p className="text-xs text-bad-500">
+                <p className="text-sm truncate">{i.name}</p>
+                <p className="text-xs text-bad-600">
                   Short by {formatPacks(-Number(i.qty_available), i)}
                 </p>
               </div>
@@ -364,23 +364,23 @@ function OverdueSection({
 
   return (
     <section className="space-y-3">
-      <h2 className="font-semibold text-white">
+      <h2 className="text-sm font-semibold">
         Overdue returns {balances.length > 0 && `(${balances.length})`}
       </h2>
-      <p className="text-sm text-ink-400">
+      <p className="text-sm text-fg-muted">
         Still signed out past the event's end date. Write off as missing once it's
         clearly not coming back.
       </p>
 
-      {loading && <p className="text-sm text-ink-400">Loading…</p>}
-      {error && <p className="text-sm text-bad-500">{error.message}</p>}
+      {loading && <p className="text-sm text-fg-muted">Loading…</p>}
+      {error && <p className="text-sm text-bad-600">{error.message}</p>}
 
       {!loading && balances.length === 0 && (
-        <div className="card p-4 text-sm text-ink-400">Nothing overdue.</div>
+        <div className="card p-4 text-sm text-fg-muted">Nothing overdue.</div>
       )}
 
       {balances.length > 0 && (
-        <ul className="card divide-y divide-ink-800">
+        <ul className="card divide-y divide-line">
           {balances.map((b) => (
             <OverdueRow
               key={`${b.event_id}-${b.person_id}-${b.item_id}`}
@@ -431,8 +431,8 @@ function OverdueRow({
     <li className="p-3 space-y-2">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-white truncate">{bal.item_name}</p>
-          <p className="text-xs text-ink-400 truncate">
+          <p className="text-sm truncate">{bal.item_name}</p>
+          <p className="text-xs text-fg-muted truncate">
             {formatPacks(bal.outstanding, bal)} · {personName} · {bal.event_name}
           </p>
         </div>
@@ -446,11 +446,11 @@ function OverdueRow({
         )}
       </div>
 
-      {error && <p className="text-sm text-bad-500">{error}</p>}
+      {error && <p className="text-sm text-bad-600">{error}</p>}
 
       {confirming && (
         <div className="flex items-center gap-2 text-sm">
-          <span className="text-ink-400">
+          <span className="text-fg-muted">
             Mark {formatPacks(bal.outstanding, bal)} as missing?
           </span>
           <button className="btn btn-primary h-9 min-h-9 px-3" onClick={() => void writeOff()} disabled={busy}>

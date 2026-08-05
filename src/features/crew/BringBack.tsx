@@ -12,7 +12,7 @@ import {
   packOptions,
   type AmountMode,
 } from '@/components/AmountInput'
-import { formatPacks, type LineCondition, type OpenBalance } from '@/lib/types'
+import { formatQty, type LineCondition, type OpenBalance } from '@/lib/types'
 
 /** Why stock didn't come back. Only ever seen by someone logging a problem. */
 const ISSUES: { value: LineCondition; label: string }[] = [
@@ -159,15 +159,15 @@ export default function BringBack() {
     return (
       <div className="space-y-4">
         <header>
-          <h1 className="text-lg font-semibold text-white">Bringing stock back</h1>
-          <p className="text-sm text-ink-400">Which event are you returning from?</p>
+          <h1 className="text-lg font-semibold">Bringing stock back</h1>
+          <p className="text-sm text-fg-muted">Which event are you returning from?</p>
         </header>
 
-        {balances.loading && <p className="text-sm text-ink-400">Loading…</p>}
-        {balances.error && <p className="text-sm text-bad-500">{balances.error.message}</p>}
+        {balances.loading && <p className="text-sm text-fg-muted">Loading…</p>}
+        {balances.error && <p className="text-sm text-bad-600">{balances.error.message}</p>}
 
         {!balances.loading && events.length === 0 && (
-          <div className="card p-6 text-center text-sm text-ink-400">
+          <div className="card p-6 text-center text-sm text-fg-muted">
             You have nothing signed out. Nothing to bring back.
           </div>
         )}
@@ -182,10 +182,10 @@ export default function BringBack() {
                   className="card w-full text-left p-4 hover:border-brand-500 transition-colors"
                   onClick={() => setEventId(id)}
                 >
-                  <p className="font-medium text-white">{first.event_name}</p>
-                  <p className="text-sm text-ink-400">
+                  <p className="font-medium text-fg">{first.event_name}</p>
+                  <p className="text-sm text-fg-muted">
                     {lines.length} item{lines.length === 1 ? '' : 's'} still out
-                    {first.overdue && <span className="text-warn-500"> · overdue</span>}
+                    {first.overdue && <span className="text-warn-600"> · overdue</span>}
                   </p>
                 </button>
               </li>
@@ -202,8 +202,8 @@ export default function BringBack() {
     <div className="space-y-3 pb-32">
       <header className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xs text-ink-400">Returning from</p>
-          <h1 className="font-semibold text-white truncate">{eventName}</h1>
+          <p className="text-xs text-fg-muted">Returning from</p>
+          <h1 className="font-semibold text-fg truncate">{eventName}</h1>
         </div>
         <button
           className="btn btn-ghost h-9 min-h-9 text-sm px-3"
@@ -244,12 +244,12 @@ export default function BringBack() {
               key={row.bal.item_id}
               className={clsx(
                 'card p-4 space-y-3',
-                flagged && 'border-warn-500/50',
+                flagged && 'border-warn-300',
               )}
             >
               <div className="flex items-baseline justify-between gap-3">
-                <p className="text-white font-medium truncate">{row.bal.item_name}</p>
-                <p className="text-xs text-ink-400 shrink-0">{formatPacks(out, row.bal)} out</p>
+                <p className="text-sm font-medium truncate">{row.bal.item_name}</p>
+                <p className="text-xs text-fg-muted shrink-0">{formatQty(out, row.bal)} out</p>
               </div>
 
               {/* Two taps cover the overwhelming majority of lines. */}
@@ -278,7 +278,7 @@ export default function BringBack() {
               </div>
 
               <div className="space-y-1">
-                <span className="text-xs text-ink-400">Sealed, unopened</span>
+                <span className="text-xs text-fg-muted">Sealed, unopened</span>
                 <AmountInput
                   item={row.bal}
                   amount={row.sealedBack}
@@ -290,7 +290,7 @@ export default function BringBack() {
 
               {row.bal.kind === 'consumable' && (
                 <div className="space-y-1">
-                  <span className="text-xs text-ink-400">Loose (opened, exact amount)</span>
+                  <span className="text-xs text-fg-muted">Loose (opened, exact amount)</span>
                   <div className="flex items-center gap-2">
                     <input
                       className="input tabular text-center w-24"
@@ -302,22 +302,22 @@ export default function BringBack() {
                       onChange={(e) => patch(idx, { looseBack: e.target.value })}
                       aria-label={`Loose amount of ${row.bal.item_name} coming back`}
                     />
-                    <span className="text-sm text-ink-400">{row.bal.unit}</span>
+                    <span className="text-sm text-fg-muted">{row.bal.unit}</span>
                   </div>
                 </div>
               )}
 
               {over && (
-                <p className="text-xs text-warn-500">
-                  More than went out — capped at {formatPacks(out, row.bal)}.
+                <p className="text-xs text-warn-600">
+                  More than went out — capped at {formatQty(out, row.bal)}.
                 </p>
               )}
 
               {loose > 0 && (
-                <p className="text-xs text-ink-400">
-                  {sealed > 0 && <>{formatPacks(sealed, row.bal)} sealed · </>}
-                  <span className="text-warn-500">
-                    {formatPacks(loose, row.bal)} loose, not a full pack
+                <p className="text-xs text-fg-muted">
+                  {sealed > 0 && <>{formatQty(sealed, row.bal)} sealed · </>}
+                  <span className="text-warn-600">
+                    {formatQty(loose, row.bal)} loose, not a full pack
                   </span>
                 </p>
               )}
@@ -325,8 +325,8 @@ export default function BringBack() {
               {gap > 0 &&
                 (row.issueOpen ? (
                   <div className="space-y-2">
-                    <p className="text-xs text-ink-400">
-                      {formatPacks(gap, row.bal)} didn’t come back — what happened?
+                    <p className="text-xs text-fg-muted">
+                      {formatQty(gap, row.bal)} didn’t come back — what happened?
                     </p>
                     <div className="grid grid-cols-4 gap-1.5">
                       {ISSUES.map((o) => (
@@ -345,9 +345,9 @@ export default function BringBack() {
                   </div>
                 ) : (
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs text-ink-400">
-                      {formatPacks(gap, row.bal)}{' '}
-                      <span className={flagged ? 'text-warn-500' : ''}>
+                    <p className="text-xs text-fg-muted">
+                      {formatQty(gap, row.bal)}{' '}
+                      <span className={flagged ? 'text-warn-600' : ''}>
                         {ISSUE_LABEL[row.reason]}
                       </span>
                     </p>
@@ -364,11 +364,11 @@ export default function BringBack() {
         })}
       </ul>
 
-      {error && <p className="text-sm text-bad-500">{error}</p>}
+      {error && <p className="text-sm text-bad-600">{error}</p>}
 
-      <div className="fixed bottom-16 inset-x-0 p-3 bg-ink-950/95 backdrop-blur border-t border-ink-800 space-y-1">
+      <div className="fixed bottom-16 inset-x-0 p-3 bg-surface/95 backdrop-blur border-t border-line space-y-1">
         {issueCount > 0 && (
-          <p className="text-xs text-warn-500 text-center">
+          <p className="text-xs text-warn-600 text-center">
             {issueCount} issue{issueCount === 1 ? '' : 's'} logged
           </p>
         )}

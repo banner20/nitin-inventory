@@ -5,7 +5,7 @@ function FullScreenSpinner() {
   return (
     <div className="min-h-dvh grid place-items-center">
       <div
-        className="size-8 rounded-full border-2 border-ink-700 border-t-brand-400 animate-spin"
+        className="size-8 rounded-full border-2 border-line border-t-brand-500 animate-spin"
         role="status"
         aria-label="Loading"
       />

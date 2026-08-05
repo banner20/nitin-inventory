@@ -137,8 +137,8 @@ export default function ImportItems({
     <div className="card p-4 space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="font-semibold text-white">Import from spreadsheet</h2>
-          <p className="text-sm text-ink-400">
+          <h2 className="text-sm font-semibold">Import from spreadsheet</h2>
+          <p className="text-sm text-fg-muted">
             Add many items at once, or update ones you already have. Reads CSV —
             save your Excel or Google Sheet as CSV first.
           </p>
@@ -159,7 +159,7 @@ export default function ImportItems({
 
       {!plan && !result && (
         <label className="block">
-          <span className="text-sm text-ink-400">Choose a CSV file</span>
+          <span className="text-sm text-fg-muted">Choose a CSV file</span>
           <input
             ref={fileRef}
             type="file"
@@ -173,12 +173,12 @@ export default function ImportItems({
         </label>
       )}
 
-      {error && <p className="text-sm text-bad-500">{error}</p>}
+      {error && <p className="text-sm text-bad-600">{error}</p>}
 
       {result && (
-        <div className="rounded-lg border border-good-500/40 bg-good-500/10 p-3 text-sm space-y-1">
-          <p className="text-good-500 font-medium">Import complete.</p>
-          <p className="text-ink-200">
+        <div className="rounded-lg border border-good-200 bg-good-50 p-3 text-sm space-y-1">
+          <p className="text-good-600 font-medium">Import complete.</p>
+          <p className="text-fg">
             {result.created} new item{result.created === 1 ? '' : 's'}, {result.updated} updated
             {result.categoriesCreated > 0 &&
               `, ${result.categoriesCreated} new categor${result.categoriesCreated === 1 ? 'y' : 'ies'}`}
@@ -189,27 +189,27 @@ export default function ImportItems({
 
       {plan && (
         <div className="space-y-3">
-          <p className="text-sm text-ink-200">
-            <span className="text-white font-medium">{fileName}</span> — {toCreate.length} new,{' '}
+          <p className="text-sm text-fg">
+            <span className="text-fg font-medium">{fileName}</span> — {toCreate.length} new,{' '}
             {toUpdate.length} to update
             {invalid.length > 0 && (
-              <span className="text-bad-500"> · {invalid.length} with errors, will be skipped</span>
+              <span className="text-bad-600"> · {invalid.length} with errors, will be skipped</span>
             )}
             . Nothing has been saved yet.
           </p>
 
-          <div className="max-h-80 overflow-y-auto card divide-y divide-ink-800">
+          <div className="max-h-80 overflow-y-auto card divide-y divide-line">
             {plan.map((line, i) => (
               <div key={i} className="p-2.5 flex items-center justify-between gap-3 text-sm">
-                <span className="text-ink-200 truncate">{line.row.name || '(no name)'}</span>
+                <span className="text-sm truncate">{line.row.name || '(no name)'}</span>
                 {line.errors.length > 0 ? (
-                  <span className="text-bad-500 text-xs shrink-0">{line.errors.join('; ')}</span>
+                  <span className="text-bad-600 text-xs shrink-0">{line.errors.join('; ')}</span>
                 ) : (
                   <span
                     className={
                       line.action === 'create'
-                        ? 'text-good-500 text-xs shrink-0'
-                        : 'text-brand-400 text-xs shrink-0'
+                        ? 'text-good-600 text-xs shrink-0'
+                        : 'text-brand-600 text-xs shrink-0'
                     }
                   >
                     {line.action === 'create' ? 'New' : 'Update existing'}

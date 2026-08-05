@@ -1,13 +1,16 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import { useAsync } from '@/lib/useAsync'
 import { fetchItemAvailability } from '@/lib/queries'
 import { fetchCategories } from '@/lib/txns'
 import {
-  formatPacks,
+  formatMoney,
   formatQty,
+  formatUnitPrice,
   itemMatches,
   type ItemAvailability,
 } from '@/lib/types'
+import { EmptyState, ErrorText, Loading, PageHeader, Stat } from '@/components/ui'
 import ImportItems from './ImportItems'
 import ItemForm from './ItemForm'
 
@@ -21,7 +24,6 @@ export default function MasterSheet() {
   const [onlyLow, setOnlyLow] = useState(false)
   const [onlyMismatch, setOnlyMismatch] = useState(false)
   const [sort, setSort] = useState<SortKey>('name')
-  const [adding, setAdding] = useState(false)
   const [importing, setImporting] = useState(false)
   const [editing, setEditing] = useState<ItemAvailability | null>(null)
 
@@ -46,36 +48,55 @@ export default function MasterSheet() {
       // coming in — the books don't add up and a human has to look. Fixed
       // in the conflict queue, or by adding the missing stock-in here.
       mismatch: list.filter((i) => Number(i.qty_available) < 0).length,
+      // Only what's actually on the shelf, and only what we have a price
+      // for — the count of unpriced items is shown alongside so the figure
+      // is never mistaken for the whole picture.
+      value: list.reduce((sum, i) => sum + Number(i.stock_value ?? 0), 0),
+      unpriced: list.filter((i) => i.unit_cost == null).length,
     }
   }, [items.data])
 
+  const filtered = !!(q || categoryId || onlyLow || onlyMismatch)
+
   return (
-    <div className="space-y-5">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold text-white">Master sheet</h1>
-          <p className="text-sm text-ink-400">
-            {totals.items} items · {totals.out} currently out
-            {totals.low > 0 && (
-              <span className="text-warn-500"> · {totals.low} below minimum</span>
-            )}
-            {totals.mismatch > 0 && (
-              <span className="text-bad-500">
-                {' '}
-                · {totals.mismatch} don't add up
-              </span>
-            )}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button className="btn btn-ghost" onClick={() => setImporting((i) => !i)}>
-            {importing ? 'Cancel' : 'Import'}
-          </button>
-          <button className="btn btn-primary" onClick={() => setAdding((a) => !a)}>
-            {adding ? 'Cancel' : 'Add item'}
-          </button>
-        </div>
-      </header>
+    <div className="space-y-5 max-w-7xl">
+      <PageHeader
+        title="Master sheet"
+        description="Everything the company owns, and where it currently is."
+        actions={
+          <>
+            <button className="btn btn-ghost" onClick={() => setImporting((i) => !i)}>
+              {importing ? 'Cancel' : 'Import'}
+            </button>
+            {/* Adding a thing and stocking it are one action now, and it
+                lives on one screen. */}
+            <Link to="/admin/stock-in" className="btn btn-primary">
+              Add stock
+            </Link>
+          </>
+        }
+      />
+
+      <div className="grid gap-3 grid-cols-2 lg:grid-cols-5">
+        <Stat
+          label={
+            totals.unpriced > 0 ? `Stock value · ${totals.unpriced} unpriced` : 'Stock value'
+          }
+          value={formatMoney(totals.value)}
+        />
+        <Stat label="Items tracked" value={totals.items} />
+        <Stat label="Currently out" value={totals.out} />
+        <Stat
+          label="Below minimum"
+          value={totals.low}
+          tone={totals.low > 0 ? 'warn' : 'neutral'}
+        />
+        <Stat
+          label="Don't add up"
+          value={totals.mismatch}
+          tone={totals.mismatch > 0 ? 'bad' : 'neutral'}
+        />
+      </div>
 
       {importing && (
         <ImportItems
@@ -86,17 +107,6 @@ export default function MasterSheet() {
             cats.reload()
           }}
           onClose={() => setImporting(false)}
-        />
-      )}
-
-      {adding && (
-        <ItemForm
-          categories={cats.data ?? []}
-          onCreated={() => {
-            setAdding(false)
-            items.reload()
-          }}
-          onCancel={() => setAdding(false)}
         />
       )}
 
@@ -112,10 +122,10 @@ export default function MasterSheet() {
         />
       )}
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <input
           className="input w-auto flex-1 min-w-56"
-          placeholder="Search items…"
+          placeholder="Search items, aliases or SKU…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
@@ -123,6 +133,7 @@ export default function MasterSheet() {
           className="input w-auto"
           value={categoryId}
           onChange={(e) => setCategoryId(e.target.value)}
+          aria-label="Filter by category"
         >
           <option value="">All categories</option>
           {(cats.data ?? []).map((c) => (
@@ -135,67 +146,159 @@ export default function MasterSheet() {
           className="input w-auto"
           value={sort}
           onChange={(e) => setSort(e.target.value as SortKey)}
+          aria-label="Sort"
         >
           <option value="name">Sort by name</option>
           <option value="qty_available">Most available</option>
           <option value="qty_out">Most out</option>
           <option value="qty_owned">Most owned</option>
         </select>
-        <label className="flex items-center gap-2 px-3 text-sm text-ink-400">
-          <input type="checkbox" checked={onlyLow} onChange={(e) => setOnlyLow(e.target.checked)} />
+
+        <FilterToggle
+          active={onlyLow}
+          onClick={() => setOnlyLow((v) => !v)}
+          tone="warn"
+          count={totals.low}
+        >
           Below minimum
-        </label>
+        </FilterToggle>
+
         {totals.mismatch > 0 && (
-          <label className="flex items-center gap-2 px-3 text-sm text-bad-500">
-            <input
-              type="checkbox"
-              checked={onlyMismatch}
-              onChange={(e) => setOnlyMismatch(e.target.checked)}
-            />
+          <FilterToggle
+            active={onlyMismatch}
+            onClick={() => setOnlyMismatch((v) => !v)}
+            tone="bad"
+            count={totals.mismatch}
+          >
             Doesn't add up
-          </label>
+          </FilterToggle>
         )}
       </div>
 
-      {items.loading && <p className="text-sm text-ink-400">Loading…</p>}
-      {items.error && <p className="text-sm text-bad-500">{items.error.message}</p>}
+      {items.loading && <Loading />}
+      {items.error && <ErrorText>{items.error.message}</ErrorText>}
 
       {!items.loading && rows.length === 0 && (
-        <div className="card p-6 text-center text-sm text-ink-400">
-          {q || categoryId || onlyLow
-            ? 'Nothing matches those filters.'
-            : 'No items yet. Add your first one above.'}
-        </div>
+        <EmptyState
+          title={filtered ? 'Nothing matches those filters' : 'No items yet'}
+          hint={
+            filtered
+              ? 'Try clearing the search or category filter.'
+              : 'Add your first item, or import a spreadsheet to load the whole catalogue at once.'
+          }
+        />
       )}
 
       {rows.length > 0 && (
-        <div className="card overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-left text-ink-400 border-b border-ink-800">
-              <tr>
-                <th className="p-3 font-medium">Item</th>
-                <th className="p-3 font-medium text-right">Owned</th>
-                <th className="p-3 font-medium text-right">Out</th>
-                <th
-                  className="p-3 font-medium text-right"
-                  title="Came back broken — held here until it's repaired or written off, not counted as available."
-                >
-                  Damaged
-                </th>
-                <th className="p-3 font-medium text-right">Available</th>
-                <th className="p-3 font-medium text-right">Min</th>
-                <th className="p-3 font-medium text-right"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-ink-800">
-              {rows.map((r) => (
-                <Row key={r.item_id} row={r} onEdit={() => setEditing(r)} />
-              ))}
-            </tbody>
-          </table>
+        <div className="card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              {/*
+                Available splits into two columns rather than one cell
+                carrying "2 bottles + 250 ml, incl. 250 ml loose". Sealed packs
+                and an opened bottle are different things to a person standing
+                at a shelf — one you can hand over whole, one you can't — so
+                they get a column each under a shared heading.
+              */}
+              <thead className="bg-surface-alt border-b border-line">
+                <tr className="text-left">
+                  <th className="th" rowSpan={2}>
+                    Item
+                  </th>
+                  <th className="th text-right" rowSpan={2}>
+                    Owned
+                  </th>
+                  <th className="th text-right" rowSpan={2}>
+                    Out
+                  </th>
+                  {/* No Damaged column: it's empty on almost every row, and a
+                      column that's always "—" costs width on every screen to
+                      report nothing. Breakage still shows — as a badge on the
+                      item itself — so the rare row where it matters can't go
+                      unnoticed, and Available still has a visible reason for
+                      being lower than Owned minus Out. */}
+                  <th className="th text-center border-x border-line pb-0" colSpan={2}>
+                    Available
+                  </th>
+                  <th className="th text-right" rowSpan={2}>
+                    Min
+                  </th>
+                  <th className="th text-right" rowSpan={2}>
+                    Price
+                  </th>
+                  <th className="th text-right" rowSpan={2}>
+                    Value
+                  </th>
+                  <th className="th text-right" rowSpan={2}>
+                    <span className="sr-only">Actions</span>
+                  </th>
+                </tr>
+                <tr className="text-left">
+                  <th
+                    className="th text-right pt-0 border-l border-line font-normal normal-case tracking-normal"
+                    title="Sealed, unopened packs — what you can hand over whole."
+                  >
+                    Full
+                  </th>
+                  <th
+                    className="th text-right pt-0 border-r border-line font-normal normal-case tracking-normal"
+                    title="Opened bottles with some left in them."
+                  >
+                    Loose
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {rows.map((r) => (
+                  <Row key={r.item_id} row={r} onEdit={() => setEditing(r)} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="px-3 py-2 border-t border-line bg-surface-alt text-xs text-fg-subtle tabular">
+            Showing {rows.length} of {totals.items} items
+          </div>
         </div>
       )}
     </div>
+  )
+}
+
+/** A filter that shows its own hit count, so you can tell whether turning it
+ * on is worth the click before you click it. */
+function FilterToggle({
+  active,
+  onClick,
+  tone,
+  count,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  tone: 'warn' | 'bad'
+  count: number
+  children: ReactNode
+}) {
+  const activeClass =
+    tone === 'bad'
+      ? 'bg-bad-50 border-bad-200 text-bad-700'
+      : 'bg-warn-50 border-warn-200 text-warn-700'
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={
+        'inline-flex items-center gap-1.5 min-h-11 px-3 rounded-lg border text-sm font-medium transition-colors ' +
+        (active
+          ? activeClass
+          : 'bg-surface border-line-strong text-fg-muted hover:bg-surface-hover')
+      }
+    >
+      {children}
+      <span className="tabular text-xs opacity-70">{count}</span>
+    </button>
   )
 }
 
@@ -210,91 +313,156 @@ function expiryStatus(dateStr: string): 'expired' | 'soon' | null {
 
 function Row({ row, onEdit }: { row: ItemAvailability; onEdit: () => void }) {
   const status = row.expiry_date ? expiryStatus(row.expiry_date) : null
+  const short = Number(row.qty_available) < 0
+  const pricedAltPacks = (row.alt_packs ?? []).filter((p) => p.unit_cost != null)
+  // Loose is a subset of available, not extra on top, so sealed is what's
+  // left once the opened bottles are set aside.
+  const loose = Number(row.qty_loose)
+  const sealed = Number(row.qty_available) - loose
+  const damaged = Number(row.qty_quarantined)
 
   return (
-    <tr className="hover:bg-ink-850">
-      <td className="p-3">
-        <span className="text-white">{row.name}</span>
-        {row.kind === 'consumable' ? (
-          <span className="ml-2 text-[10px] uppercase tracking-wide text-ink-600">
-            consumable
+    <tr className="hover:bg-surface-hover transition-colors">
+      <td className="px-3 py-2.5">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-medium">{row.name}</span>
+          <span
+            className={
+              'badge ' + (row.kind === 'consumable' ? 'badge-neutral' : 'badge-brand')
+            }
+          >
+            {row.kind}
           </span>
-        ) : (
-          <span className="ml-2 text-[10px] uppercase tracking-wide text-brand-400/70">
-            returnable
-          </span>
-        )}
-        <span className="block text-xs text-ink-600">
+          {status && (
+            <span className={'badge ' + (status === 'expired' ? 'badge-bad' : 'badge-warn')}>
+              {status === 'expired' ? 'Expired' : 'Expires'}{' '}
+              {new Date(row.expiry_date!).toLocaleDateString('en-IN', {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric',
+              })}
+            </span>
+          )}
+          {damaged > 0 && (
+            <span
+              className="badge badge-warn"
+              title="Came back broken — held back until it's repaired or written off, and not counted as available."
+            >
+              {formatQty(damaged, row)} damaged
+            </span>
+          )}
+        </div>
+        <span className="block text-xs text-fg-subtle mt-0.5">
           {row.pack_label ? `${row.pack_size} ${row.unit} per ${row.pack_label}` : row.unit}
           {row.alt_packs && row.alt_packs.length > 0 && (
-            <> · also {row.alt_packs.map((p) => `${p.pack_size} ${row.unit} per ${p.pack_label}`).join(', ')}</>
+            <>
+              {' · also '}
+              {row.alt_packs
+                .map((p) => `${p.pack_size} ${row.unit} per ${p.pack_label}`)
+                .join(', ')}
+            </>
+          )}
+          {(row.last_vendor || row.last_unit_cost != null) && (
+            <>
+              {' · '}
+              {row.last_vendor}
+              {row.last_vendor && row.last_unit_cost != null && ' · '}
+              {row.last_unit_cost != null &&
+                `₹${row.last_unit_cost.toLocaleString('en-IN')}/${row.unit}`}
+            </>
           )}
         </span>
-        {(row.last_vendor || row.last_unit_cost != null) && (
-          <span className="block text-xs text-ink-600">
-            {row.last_vendor}
-            {row.last_vendor && row.last_unit_cost != null && ' · '}
-            {row.last_unit_cost != null && `₹${row.last_unit_cost.toLocaleString('en-IN')}/${row.unit}`}
-          </span>
-        )}
-        {status && (
-          <span
-            className={`block text-xs ${status === 'expired' ? 'text-bad-500' : 'text-warn-500'}`}
-          >
-            {status === 'expired' ? 'Expired' : 'Expires'}{' '}
-            {new Date(row.expiry_date!).toLocaleDateString('en-IN', {
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric',
-            })}
-          </span>
-        )}
       </td>
-      <td className="p-3 text-right tabular text-ink-400">
-        {Number(row.qty_owned) ? formatPacks(row.qty_owned, row) : ''}
+
+      {/* Every quantity column reads the same way — whole packs plus the
+          remainder, never "2.357 monins". */}
+      <td className="px-3 py-2.5 text-right tabular text-fg-muted whitespace-nowrap">
+        {Number(row.qty_owned) ? formatQty(row.qty_owned, row) : '—'}
       </td>
-      <td className="p-3 text-right tabular text-ink-400">
-        {Number(row.qty_out) ? formatPacks(row.qty_out, row) : ''}
+
+      <td className="px-3 py-2.5 text-right tabular text-fg-muted whitespace-nowrap">
+        {Number(row.qty_out) ? formatQty(row.qty_out, row) : '—'}
       </td>
-      <td className="p-3 text-right tabular">
-        {Number(row.qty_quarantined) ? (
-          <span className="text-warn-500">{formatPacks(row.qty_quarantined, row)}</span>
-        ) : (
-          ''
-        )}
-      </td>
-      <td className="p-3 text-right tabular font-semibold">
+
+      <td className="px-3 py-2.5 text-right tabular whitespace-nowrap border-l border-line">
         <span
           className={
-            Number(row.qty_available) < 0
-              ? 'text-bad-500'
-              : row.below_min
-                ? 'text-warn-500'
-                : 'text-white'
+            'font-semibold ' +
+            (short ? 'text-bad-600' : row.below_min ? 'text-warn-600' : 'text-fg')
           }
           title={
-            Number(row.qty_available) < 0
+            short
               ? "Doesn't add up: more has gone out than was ever recorded as bought or received. Fix it under Conflicts, or add the missing stock-in here."
-              : formatQty(row.qty_available, row)
+              : `${formatQty(sealed, row)} sealed of ${formatQty(row.qty_available, row)} available`
           }
         >
-          {formatQty(row.qty_available, row)}
+          {sealed === 0 ? (
+            <span className="text-fg-subtle font-normal">
+              {loose > 0 ? 'none sealed' : formatQty(0, row)}
+            </span>
+          ) : (
+            formatQty(sealed, row)
+          )}
         </span>
-        {Number(row.qty_available) < 0 && (
-          <span className="block text-[10px] uppercase tracking-wide text-bad-500/80">
-            doesn't add up
-          </span>
-        )}
-        {Number(row.qty_loose) > 0 && (
-          <span className="block text-[10px] font-normal text-ink-500">
-            incl. {formatPacks(row.qty_loose, row)} loose
+        {short && (
+          <span className="block mt-1">
+            <span className="badge badge-bad">doesn't add up</span>
           </span>
         )}
       </td>
-      <td className="p-3 text-right tabular text-ink-600">
-        {Number(row.min_stock) ? formatPacks(row.min_stock, row) : ''}
+
+      <td className="px-3 py-2.5 text-right tabular whitespace-nowrap border-r border-line">
+        {loose > 0 ? (
+          /* Loose stock is a part-used bottle, so it reads in the base unit —
+             "0.357 bottles" is arithmetically true and useless to anyone
+             holding the thing. */
+          <span className="text-warn-700" title="Opened — not a full pack">
+            {formatQty(loose, row)}
+          </span>
+        ) : (
+          <span className="text-fg-subtle">—</span>
+        )}
       </td>
-      <td className="p-3 text-right">
+
+      <td className="px-3 py-2.5 text-right tabular text-fg-subtle whitespace-nowrap">
+        {Number(row.min_stock) ? formatQty(row.min_stock, row) : "—"}
+      </td>
+
+      <td className="px-3 py-2.5 text-right tabular text-fg-muted whitespace-nowrap">
+        {row.unit_cost == null ? (
+          <span className="text-fg-subtle" title="No price on file yet">
+            —
+          </span>
+        ) : (
+          <>
+            {formatUnitPrice(row.unit_cost, row)}
+            {/* Each size has its own price, so an item bought as both
+                bottles and a bulk jug has two. The main one is shown; the
+                rest are a hover away rather than crowding the column. */}
+            {pricedAltPacks.length > 0 && (
+              <span
+                className="block text-[11px] text-fg-subtle"
+                title={pricedAltPacks
+                  .map((p) => `${formatMoney(p.unit_cost! * p.pack_size)} per ${p.pack_label}`)
+                  .join('\n')}
+              >
+                +{pricedAltPacks.length} other size
+                {pricedAltPacks.length === 1 ? '' : 's'}
+              </span>
+            )}
+          </>
+        )}
+      </td>
+
+      <td className="px-3 py-2.5 text-right tabular whitespace-nowrap">
+        {row.stock_value == null ? (
+          <span className="text-fg-subtle">—</span>
+        ) : (
+          <span className="font-medium">{formatMoney(row.stock_value)}</span>
+        )}
+      </td>
+
+      <td className="px-3 py-2.5 text-right">
         <button className="btn btn-ghost h-8 min-h-8 text-xs px-2.5" onClick={onEdit}>
           Edit
         </button>
@@ -302,4 +470,3 @@ function Row({ row, onEdit }: { row: ItemAvailability; onEdit: () => void }) {
     </tr>
   )
 }
-
