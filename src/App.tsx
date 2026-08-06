@@ -11,6 +11,7 @@ import Me from '@/features/crew/Me'
 import TakeOut from '@/features/crew/TakeOut'
 import BringBack from '@/features/crew/BringBack'
 import Events from '@/features/admin/Events'
+import EventDetail from '@/features/admin/EventDetail'
 import People from '@/features/admin/People'
 import MasterSheet from '@/features/admin/MasterSheet'
 import StockIn from '@/features/admin/StockIn'
@@ -45,6 +46,7 @@ function Routing() {
             <Route path="stock-in" element={<StockIn />} />
             <Route path="conflicts" element={<ConflictQueue />} />
             <Route path="events" element={<Events />} />
+            <Route path="events/:eventId" element={<EventDetail />} />
             <Route path="history" element={<History />} />
             <Route path="people" element={<People />} />
           </Route>

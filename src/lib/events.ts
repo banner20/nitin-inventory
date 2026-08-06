@@ -25,6 +25,17 @@ export async function fetchAllEvents(): Promise<EventRecord[]> {
   return (data ?? []) as EventRecord[]
 }
 
+export async function fetchEvent(id: string): Promise<EventRecord | null> {
+  const { data, error } = await supabase
+    .from('events')
+    .select(EVENT_COLS)
+    .eq('id', id)
+    .maybeSingle()
+
+  if (error) throw error
+  return (data as EventRecord | null) ?? null
+}
+
 export interface NewEventInput {
   name: string
   client?: string
