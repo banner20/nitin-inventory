@@ -21,6 +21,10 @@ import { EmptyState, ErrorText, PageHeader } from '@/components/ui'
 import ItemForm from './ItemForm'
 
 interface DraftRow {
+  /** Identifies the row, not the item — one delivery can hold the same syrup
+   * as 250ml bottles and 500ml bottles, at different prices, and those are
+   * two rows rather than one. */
+  key: string
   item: ItemAvailability
   amount: string
   mode: AmountMode
@@ -29,6 +33,11 @@ interface DraftRow {
   /** True for a row whose item was created here and now, so the summary can
    * say how many things are new rather than just how many lines there are. */
   isNew?: boolean
+}
+
+let rowSeq = 0
+function nextKey(): string {
+  return `row-${++rowSeq}`
 }
 
 function toBase(row: DraftRow): number {
@@ -90,7 +99,9 @@ export default function StockIn() {
   // the new-item panel right here instead of sending them away to do it.
   const [creatingName, setCreatingName] = useState<string | null>(null)
 
-  const chosen = new Set(rows.map((r) => r.item.item_id))
+  /** Which size of which item is already in the basket. Keyed by both,
+   * because adding a second size of something already listed is the point. */
+  const chosen = new Set(rows.map((r) => `${r.item.item_id}:${r.mode}`))
 
   // Arriving from the conflict queue with "this item needs stock" pre-adds
   // it, so fixing a mismatch is one screen instead of a search-and-find.
@@ -118,10 +129,17 @@ export default function StockIn() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // An item stays searchable while it's in the basket, so long as it has a
+  // size that isn't listed yet — that's how the same syrup gets added as both
+  // 250ml and 500ml.
   const matches = useMemo(() => {
     if (!q.trim()) return []
     return (items.data ?? [])
-      .filter((i) => itemMatches(i, q) && !chosen.has(i.item_id))
+      .filter((i) => {
+        if (!itemMatches(i, q)) return false
+        const sizes = [...packOptions(i).map((o) => o.id), 'base']
+        return sizes.some((s) => !chosen.has(`${i.item_id}:${s}`))
+      })
       .slice(0, 8)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q, items.data, rows])
@@ -132,9 +150,19 @@ export default function StockIn() {
   /** Adding an item prefills what it usually costs and who it usually comes
    * from — a hint to edit, not a silent default — so re-ordering the same
    * thing doesn't mean retyping a price you already paid last time. */
-  function addRow(item: ItemAvailability) {
-    const mode = defaultMode(item)
-    setRows((r) => [...r, { item, amount: '1', mode, packCost: priceFor(item, mode) }])
+  function addRow(item: ItemAvailability, preferredMode?: AmountMode) {
+    // Land on a size that isn't already in the basket, so clicking an item a
+    // second time offers its other size rather than a duplicate of the first.
+    const sizes = [...packOptions(item).map((o) => o.id), 'base']
+    const mode =
+      preferredMode ??
+      sizes.find((s) => !chosen.has(`${item.item_id}:${s}`)) ??
+      defaultMode(item)
+
+    setRows((r) => [
+      ...r,
+      { key: nextKey(), item, amount: '1', mode, packCost: priceFor(item, mode) },
+    ])
     setQ('')
 
     if (!vendor.trim() && item.last_vendor) setVendor(item.last_vendor)
@@ -145,7 +173,7 @@ export default function StockIn() {
    * exactly the mistake this is here to prevent. */
   function onAmountChange(row: DraftRow, amount: string, mode: AmountMode) {
     const sizeChanged = mode !== row.mode
-    update(row.item.item_id, {
+    update(row.key, {
       amount,
       mode,
       ...(sizeChanged ? { packCost: priceFor(row.item, mode) } : {}),
@@ -161,18 +189,21 @@ export default function StockIn() {
     const packCost =
       item.unit_cost != null ? String(Number((item.unit_cost * packSize).toFixed(2))) : ''
 
-    setRows((r) => [...r, { item: withStock, amount: '1', mode, packCost, isNew: true }])
+    setRows((r) => [
+      ...r,
+      { key: nextKey(), item: withStock, amount: '1', mode, packCost, isNew: true },
+    ])
     setCreatingName(null)
     setQ('')
     items.reload()
   }
 
-  function update(id: string, patch: Partial<DraftRow>) {
-    setRows((r) => r.map((row) => (row.item.item_id === id ? { ...row, ...patch } : row)))
+  function update(key: string, patch: Partial<DraftRow>) {
+    setRows((r) => r.map((row) => (row.key === key ? { ...row, ...patch } : row)))
   }
 
-  function remove(id: string) {
-    setRows((r) => r.filter((row) => row.item.item_id !== id))
+  function remove(key: string) {
+    setRows((r) => r.filter((row) => row.key !== key))
   }
 
   async function post() {
@@ -314,12 +345,20 @@ export default function StockIn() {
       {rows.length > 0 && (
         <ul className="space-y-2">
           {rows.map((r) => (
-            <li key={r.item.item_id} className="card p-3 space-y-2">
+            <li key={r.key} className="card p-3 space-y-2">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-sm font-medium truncate flex items-center gap-2">
                     {r.item.name}
                     {r.isNew && <span className="badge badge-good">new</span>}
+                    {/* When the same item appears more than once, say which
+                        size each row is — otherwise two identical-looking
+                        rows are indistinguishable at a glance. */}
+                    {rows.filter((x) => x.item.item_id === r.item.item_id).length > 1 && (
+                      <span className="badge badge-brand">
+                        {packOptions(r.item).find((o) => o.id === r.mode)?.label ?? r.item.unit}
+                      </span>
+                    )}
                   </p>
                   {r.item.last_vendor && (
                     <p className="text-xs text-fg-subtle">
@@ -329,13 +368,28 @@ export default function StockIn() {
                     </p>
                   )}
                 </div>
-                <button
-                  className="text-fg-subtle hover:text-bad-600 px-2"
-                  onClick={() => remove(r.item.item_id)}
-                  aria-label={`Remove ${r.item.name}`}
-                >
-                  ✕
-                </button>
+                <div className="flex items-center gap-1 shrink-0">
+                  {/* Adding another size of something already in the basket
+                      is the common case for a mixed delivery, so it's a
+                      button on the row rather than a second search. */}
+                  {packOptions(r.item).length > 1 && (
+                    <button
+                      type="button"
+                      className="btn btn-quiet h-8 min-h-8 text-xs px-2"
+                      onClick={() => addRow(r.item)}
+                      title="Add another size of this item to the same delivery"
+                    >
+                      + size
+                    </button>
+                  )}
+                  <button
+                    className="text-fg-subtle hover:text-bad-600 px-2"
+                    onClick={() => remove(r.key)}
+                    aria-label={`Remove ${r.item.name}`}
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
 
               <div className="flex flex-wrap items-end gap-3">
@@ -355,7 +409,7 @@ export default function StockIn() {
                     min={0}
                     step="0.01"
                     value={r.packCost}
-                    onChange={(e) => update(r.item.item_id, { packCost: e.target.value })}
+                    onChange={(e) => update(r.key, { packCost: e.target.value })}
                     placeholder="₹"
                   />
                 </label>

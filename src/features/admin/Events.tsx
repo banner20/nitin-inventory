@@ -1,13 +1,93 @@
 import { useState, type FormEvent } from 'react'
 import { useAsync } from '@/lib/useAsync'
 import { createEvent, fetchAllEvents, setEventStatus } from '@/lib/events'
-import type { EventRecord, EventStatus } from '@/lib/types'
+import { fetchEventCosts } from '@/lib/queries'
+import { downloadTextFile, objectsToCsv } from '@/lib/csv'
+import { formatQty, type EventRecord, type EventStatus } from '@/lib/types'
 
 const STATUS_STYLE: Record<EventStatus, string> = {
   planned: 'text-fg-muted',
   out: 'text-brand-600',
   closed: 'text-fg-subtle',
   cancelled: 'text-fg-subtle line-through',
+}
+
+/**
+ * The accounts report.
+ *
+ * Two kinds of column on purpose: plain numbers in the item's base unit, which
+ * a spreadsheet can total and multiply, and a readable version beside them for
+ * the person checking it against what actually happened. Accounts need to do
+ * arithmetic; whoever signs it off needs to recognise "2 bottles + 250 ml".
+ *
+ * Damaged is listed but not billed — it's still owned, just not usable yet, so
+ * charging for it here would double-count once it's repaired or written off.
+ */
+const REPORT_COLUMNS = [
+  'Item',
+  'Category',
+  'Unit',
+  'Pack',
+  'Taken out',
+  'Taken out (readable)',
+  'Brought back',
+  'Served',
+  'Spilled',
+  'Missing',
+  'Damaged',
+  'Still out',
+  'Used up',
+  'Used up (readable)',
+  'Price per unit',
+  'Cost of stock used',
+]
+
+async function downloadEventReport(event: EventRecord): Promise<void> {
+  const lines = await fetchEventCosts(event.id)
+
+  const num = (n: number | null | undefined) => (n == null ? '' : String(Number(n)))
+
+  const rows = lines.map((l) => ({
+    Item: l.item_name,
+    Category: l.category_name ?? '',
+    Unit: l.unit,
+    Pack: l.pack_label ? `${l.pack_size} ${l.unit} per ${l.pack_label}` : '',
+    'Taken out': num(l.qty_out),
+    'Taken out (readable)': formatQty(l.qty_out, l),
+    'Brought back': num(l.qty_returned),
+    Served: num(l.qty_consumed),
+    Spilled: num(l.qty_wasted),
+    Missing: num(l.qty_lost),
+    Damaged: num(l.qty_damaged),
+    'Still out': num(l.still_out),
+    'Used up': num(l.qty_used),
+    'Used up (readable)': formatQty(l.qty_used, l),
+    'Price per unit': l.unit_cost == null ? '' : String(Number(l.unit_cost)),
+    'Cost of stock used': l.cost_used == null ? '' : String(Number(l.cost_used)),
+  }))
+
+  const totalCost = lines.reduce((sum, l) => sum + Number(l.cost_used ?? 0), 0)
+  const unpriced = lines.filter((l) => l.unit_cost == null).length
+
+  // A total row, then a note if any of it couldn't be costed — a bill that
+  // silently omits the items with no price on file is worse than one that
+  // says so.
+  rows.push({
+    ...Object.fromEntries(REPORT_COLUMNS.map((c) => [c, ''])),
+    Item: 'TOTAL',
+    'Cost of stock used': String(Number(totalCost.toFixed(2))),
+  } as (typeof rows)[number])
+
+  if (unpriced > 0) {
+    rows.push({
+      ...Object.fromEntries(REPORT_COLUMNS.map((c) => [c, ''])),
+      Item: `Note: ${unpriced} item${unpriced === 1 ? '' : 's'} had no price on file and are not included in the total.`,
+    } as (typeof rows)[number])
+  }
+
+  const safeName = event.name.replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-')
+  const date = new Date(event.starts_at).toISOString().slice(0, 10)
+  downloadTextFile(`${date}-${safeName}-accounts.csv`, objectsToCsv(rows, REPORT_COLUMNS))
 }
 
 /** Local datetime string for <input type="datetime-local">. */
@@ -84,6 +164,8 @@ function EventRow({
   onChanged: (text: string) => void
 }) {
   const [busy, setBusy] = useState(false)
+  const [downloading, setDownloading] = useState(false)
+  const [reportError, setReportError] = useState<string | null>(null)
 
   async function change(status: EventStatus) {
     setBusy(true)
@@ -92,6 +174,18 @@ function EventRow({
       onChanged(`${event.name} marked ${status}.`)
     } finally {
       setBusy(false)
+    }
+  }
+
+  async function report() {
+    setDownloading(true)
+    setReportError(null)
+    try {
+      await downloadEventReport(event)
+    } catch (err) {
+      setReportError(err instanceof Error ? err.message : 'Could not build the report.')
+    } finally {
+      setDownloading(false)
     }
   }
 
@@ -116,18 +210,32 @@ function EventRow({
         </p>
       </div>
 
-      <select
-        className="input h-9 min-h-9 w-auto text-sm py-0"
-        value={event.status}
-        disabled={busy}
-        onChange={(e) => void change(e.target.value as EventStatus)}
-        aria-label={`Status of ${event.name}`}
-      >
-        <option value="planned">planned</option>
-        <option value="out">out</option>
-        <option value="closed">closed</option>
-        <option value="cancelled">cancelled</option>
-      </select>
+      <div className="flex items-center gap-2 shrink-0">
+        {reportError && <span className="text-xs text-bad-600">{reportError}</span>}
+
+        <button
+          type="button"
+          className="btn btn-ghost h-9 min-h-9 text-sm px-3"
+          onClick={() => void report()}
+          disabled={downloading}
+          title="Download a spreadsheet of what this event used and what it cost"
+        >
+          {downloading ? 'Building…' : 'Accounts report'}
+        </button>
+
+        <select
+          className="input h-9 min-h-9 w-auto text-sm py-0"
+          value={event.status}
+          disabled={busy}
+          onChange={(e) => void change(e.target.value as EventStatus)}
+          aria-label={`Status of ${event.name}`}
+        >
+          <option value="planned">planned</option>
+          <option value="out">out</option>
+          <option value="closed">closed</option>
+          <option value="cancelled">cancelled</option>
+        </select>
+      </div>
     </div>
   )
 }

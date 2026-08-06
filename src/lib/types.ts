@@ -120,6 +120,36 @@ export interface ItemAvailability {
   last_purchased_at: string | null
 }
 
+/**
+ * One line of an event's bill: what went out, what came back, and what the
+ * difference cost. Damaged is reported but deliberately not billed — it's
+ * still physically owned, just not usable yet, so charging for it here would
+ * double-count when it's later repaired or written off.
+ */
+export interface EventCostLine {
+  event_id: string
+  event_name: string
+  item_id: string
+  item_name: string
+  unit: string
+  kind: ItemKind
+  category_name: string | null
+  pack_size: number
+  pack_label: string | null
+  unit_cost: number | null
+  qty_out: number
+  qty_returned: number
+  qty_consumed: number
+  qty_wasted: number
+  qty_damaged: number
+  qty_lost: number
+  still_out: number
+  /** Served + spilled + never came back: everything the company no longer has. */
+  qty_used: number
+  cost_used: number | null
+  cost_taken_out: number | null
+}
+
 /** One purchase of an item, for the price trail on the edit form. */
 export interface PriceHistoryEntry {
   item_id: string

@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import type {
+  EventCostLine,
   ItemAvailability,
   OpenBalance,
   PriceHistoryEntry,
@@ -112,6 +113,18 @@ export async function fetchPriceHistory(itemId: string): Promise<PriceHistoryEnt
 
   if (error) throw error
   return (data ?? []) as PriceHistoryEntry[]
+}
+
+/** Every item touched by one event, with what it cost. The accounts report. */
+export async function fetchEventCosts(eventId: string): Promise<EventCostLine[]> {
+  const { data, error } = await supabase
+    .from('v_event_costs')
+    .select('*')
+    .eq('event_id', eventId)
+    .order('item_name')
+
+  if (error) throw error
+  return (data ?? []) as EventCostLine[]
 }
 
 export async function fetchProfiles(): Promise<Profile[]> {
