@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAsync } from '@/lib/useAsync'
+import { useIdempotencyKey } from '@/lib/useIdempotencyKey'
 import { fetchItemAvailability } from '@/lib/queries'
 import { fetchCategories, postTxn, type PostLine } from '@/lib/txns'
 import {
@@ -87,6 +88,7 @@ function packIdFor(row: DraftRow): string {
 export default function StockIn() {
   const items = useAsync(fetchItemAvailability, [])
   const cats = useAsync(fetchCategories, [])
+  const idem = useIdempotencyKey()
   const [searchParams, setSearchParams] = useSearchParams()
   const [q, setQ] = useState('')
   const [rows, setRows] = useState<DraftRow[]>([])
@@ -223,7 +225,8 @@ export default function StockIn() {
           vendor: vendor.trim() || null,
         }
       })
-      await postTxn({ type: 'ADD', lines, note })
+      await postTxn({ type: 'ADD', lines, note, clientUuid: idem.current() })
+      idem.reset()
       setDone({ count: rows.length, total: totalValue })
       setRows([])
       setVendor('')

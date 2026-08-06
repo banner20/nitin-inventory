@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import clsx from 'clsx'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { useAsync } from '@/lib/useAsync'
+import { useIdempotencyKey } from '@/lib/useIdempotencyKey'
 import { fetchMyOpenBalances } from '@/lib/queries'
 import { postTxn, type PostLine } from '@/lib/txns'
 import {
@@ -84,6 +85,7 @@ export default function BringBack() {
     [personId],
   )
 
+  const idem = useIdempotencyKey()
   const [eventId, setEventId] = useState<string | null>(null)
   const [rows, setRows] = useState<Row[]>([])
   const [busy, setBusy] = useState(false)
@@ -144,7 +146,14 @@ export default function BringBack() {
       }
       if (lines.length === 0) throw new Error('Nothing to record.')
 
-      await postTxn({ type: 'IN', lines, eventId, personId: profile.id })
+      await postTxn({
+        type: 'IN',
+        lines,
+        eventId,
+        personId: profile.id,
+        clientUuid: idem.current(),
+      })
+      idem.reset()
       navigate('/', { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save.')

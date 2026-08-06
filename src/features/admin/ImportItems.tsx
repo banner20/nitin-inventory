@@ -1,6 +1,12 @@
 import { useRef, useState } from 'react'
 import { csvToObjects, downloadTextFile, objectsToCsv } from '@/lib/csv'
-import { planImport, runImport, type ImportPlanLine, type ImportRow } from '@/lib/txns'
+import {
+  planImport,
+  runImport,
+  type ImportPlanLine,
+  type ImportRow,
+  type ImportSummary,
+} from '@/lib/txns'
 import type { Category, ItemAvailability } from '@/lib/types'
 
 const TEMPLATE_COLUMNS = [
@@ -86,12 +92,7 @@ export default function ImportItems({
   const [fileName, setFileName] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [result, setResult] = useState<{
-    created: number
-    updated: number
-    categoriesCreated: number
-    skipped: number
-  } | null>(null)
+  const [result, setResult] = useState<ImportSummary | null>(null)
 
   async function onFile(file: File) {
     setError(null)
@@ -176,14 +177,48 @@ export default function ImportItems({
       {error && <p className="text-sm text-bad-600">{error}</p>}
 
       {result && (
-        <div className="rounded-lg border border-good-200 bg-good-50 p-3 text-sm space-y-1">
-          <p className="text-good-600 font-medium">Import complete.</p>
-          <p className="text-fg">
-            {result.created} new item{result.created === 1 ? '' : 's'}, {result.updated} updated
-            {result.categoriesCreated > 0 &&
-              `, ${result.categoriesCreated} new categor${result.categoriesCreated === 1 ? 'y' : 'ies'}`}
-            {result.skipped > 0 && `, ${result.skipped} skipped for errors`}.
-          </p>
+        <div className="space-y-2">
+          <div
+            className={
+              'rounded-lg border p-3 text-sm space-y-1 ' +
+              (result.failed.length > 0
+                ? 'border-warn-200 bg-warn-50'
+                : 'border-good-200 bg-good-50')
+            }
+          >
+            <p
+              className={
+                'font-medium ' +
+                (result.failed.length > 0 ? 'text-warn-700' : 'text-good-700')
+              }
+            >
+              {result.failed.length > 0 ? 'Import finished with problems.' : 'Import complete.'}
+            </p>
+            <p className="text-fg">
+              {result.created} new item{result.created === 1 ? '' : 's'}, {result.updated} updated
+              {result.categoriesCreated > 0 &&
+                `, ${result.categoriesCreated} new categor${result.categoriesCreated === 1 ? 'y' : 'ies'}`}
+              {result.skipped > 0 && `, ${result.skipped} skipped for errors`}.
+            </p>
+          </div>
+
+          {/* Name every row the database refused. A count alone tells you
+              something went wrong without telling you what to re-enter. */}
+          {result.failed.length > 0 && (
+            <div className="rounded-lg border border-bad-200 bg-bad-50 p-3 text-sm space-y-1.5">
+              <p className="text-bad-700 font-medium">
+                {result.failed.length} row{result.failed.length === 1 ? '' : 's'} didn't save:
+              </p>
+              <ul className="space-y-1">
+                {result.failed.map((f, i) => (
+                  <li key={i} className="text-xs text-fg">
+                    <span className="font-medium">{f.name || '(no name)'}</span>
+                    <span className="text-fg-muted"> — {f.reason}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
 

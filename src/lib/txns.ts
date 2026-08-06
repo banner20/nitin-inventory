@@ -305,6 +305,13 @@ export interface ImportSummary {
   updated: number
   categoriesCreated: number
   skipped: number
+  /**
+   * Rows the database refused, by name and reason. These used to be silently
+   * dropped — the counter simply didn't increment — so an import could report
+   * "12 updated" when five had failed and nobody would know which five. A bulk
+   * write that quietly loses rows is worse than one that fails loudly.
+   */
+  failed: { name: string; reason: string }[]
 }
 
 /** Run at limited concurrency so a few hundred rows don't fire a few hundred
@@ -400,17 +407,34 @@ export async function runImport(
   }
 
   let updated = 0
+  const failed: { name: string; reason: string }[] = []
+
   await withConcurrency(toUpdate, 5, async (line) => {
     const { error } = await supabase
       .from('items')
       .update(toPayload(line))
       .eq('id', line.existingId!)
-    if (!error) {
-      updated++
+
+    if (error) {
+      failed.push({ name: line.row.name.trim(), reason: error.message })
+      return
+    }
+
+    updated++
+    try {
       const packs = parseAltPacks(line.row.alt_packs)
       if (packs.length > 0) await setItemPacks(line.existingId!, packs)
+    } catch (err) {
+      // The item itself saved; only its extra pack sizes didn't. Worth
+      // saying so rather than reporting an unqualified success.
+      failed.push({
+        name: line.row.name.trim(),
+        reason: `updated, but its extra sizes failed: ${
+          err instanceof Error ? err.message : 'unknown error'
+        }`,
+      })
     }
   })
 
-  return { created, updated, categoriesCreated, skipped }
+  return { created, updated, categoriesCreated, skipped, failed }
 }

@@ -2,6 +2,8 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider, useAuth } from '@/features/auth/AuthProvider'
 import { RequireAuth, RequireManager } from '@/components/guards'
 import { supabaseConfigured } from '@/lib/supabase'
+import ErrorBoundary from '@/components/ErrorBoundary'
+import NotFound from '@/components/NotFound'
 import SetupScreen from '@/components/SetupScreen'
 import CrewShell from '@/components/CrewShell'
 import AdminShell from '@/components/AdminShell'
@@ -53,7 +55,7 @@ function Routing() {
         </Route>
       </Route>
 
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<NotFound />} />
     </Routes>
   )
 }
@@ -62,8 +64,10 @@ export default function App() {
   if (!supabaseConfigured) return <SetupScreen />
 
   return (
-    <AuthProvider>
-      <Routing />
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <Routing />
+      </AuthProvider>
+    </ErrorBoundary>
   )
 }

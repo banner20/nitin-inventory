@@ -28,26 +28,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
 
-  // Load the profile that belongs to a session. A session without a matching
-  // active profile means the account was deactivated while signed in — treat
-  // that as signed out rather than letting them into a half-broken app.
+  /**
+   * Load the profile that belongs to a session.
+   *
+   * Two failures look identical from here and must not be treated alike. "The
+   * database says this account is gone or deactivated" is a real answer, and
+   * signing out is right. "The request didn't arrive" is not an answer at all
+   * — and a phone in a cellar drops requests constantly. Treating the second
+   * like the first threw people back to the login screen mid-shift, which is
+   * how a system stops being used.
+   *
+   * So: a definite answer is obeyed, and a failure to get one is retried a
+   * few times before giving up. Giving up keeps the session — the next auth
+   * event or reload tries again — rather than throwing the shift away.
+   */
   const syncProfile = useCallback(async (next: Session | null) => {
     if (!next) {
       setProfile(null)
       return
     }
-    try {
-      const p = await fetchProfile(next.user.id)
-      if (!p || !p.active) {
-        await doSignOut()
-        setProfile(null)
-        setSession(null)
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const p = await fetchProfile(next.user.id)
+        if (!p || !p.active) {
+          await doSignOut()
+          setProfile(null)
+          setSession(null)
+          return
+        }
+        setProfile(p)
         return
+      } catch {
+        // 400ms, then 800ms — long enough to outlast a handover between
+        // cells, short enough that nobody watches a spinner over it.
+        if (attempt < 2) {
+          await new Promise((r) => setTimeout(r, 400 * 2 ** attempt))
+        }
       }
-      setProfile(p)
-    } catch {
-      setProfile(null)
     }
+    // Couldn't reach the database. Say nothing and keep the session; the
+    // guard will hold on the spinner and the next attempt may well work.
   }, [])
 
   useEffect(() => {

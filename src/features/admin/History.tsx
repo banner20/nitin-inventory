@@ -42,18 +42,26 @@ export default function History() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Typing shouldn't fire a query per keystroke, and shouldn't reset the list
+  // to page zero on every one either.
+  const [debouncedQ, setDebouncedQ] = useState('')
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQ(q.trim()), 250)
+    return () => clearTimeout(t)
+  }, [q])
+
   useEffect(() => {
     setEntries([])
     setPage(0)
     setHasMore(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [type])
+  }, [type, debouncedQ])
 
   useEffect(() => {
     let cancelled = false
     setLoading(true)
     setError(null)
-    fetchTxnHistory(page * PAGE_SIZE, PAGE_SIZE, type || undefined)
+    fetchTxnHistory(page * PAGE_SIZE, PAGE_SIZE, type || undefined, debouncedQ || undefined)
       .then((rows) => {
         if (cancelled) return
         setEntries((prev) => (page === 0 ? rows : [...prev, ...rows]))
@@ -68,26 +76,10 @@ export default function History() {
     return () => {
       cancelled = true
     }
-  }, [page, type])
+  }, [page, type, debouncedQ])
 
-  const needle = q.trim().toLowerCase()
-  const visible = needle
-    ? entries.filter((e) => {
-        const haystack = [
-          e.event_name,
-          e.actor_name,
-          e.actor_emp_code,
-          e.person_name,
-          e.person_emp_code,
-          e.note,
-          ...(e.lines ?? []).map((l) => l.item_name),
-        ]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase()
-        return haystack.includes(needle)
-      })
-    : entries
+  const needle = debouncedQ.toLowerCase()
+  const visible = entries
 
   return (
     <div className="space-y-5 max-w-4xl">
@@ -138,7 +130,9 @@ export default function History() {
 
       {loading && <p className="text-sm text-fg-muted">Loading…</p>}
 
-      {!loading && hasMore && !needle && (
+      {/* Available while searching too — the search now runs across every
+          record, so there really is more to load. */}
+      {!loading && hasMore && (
         <button className="btn btn-ghost w-full" onClick={() => setPage((p) => p + 1)}>
           Load more
         </button>

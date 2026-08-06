@@ -2,6 +2,8 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { useAsync } from '@/lib/useAsync'
+import { useIdempotencyKey } from '@/lib/useIdempotencyKey'
+import { usePersistentState } from '@/lib/usePersistentState'
 import { fetchItemAvailability } from '@/lib/queries'
 import { createEvent, fetchActiveEvents } from '@/lib/events'
 import { createItem, postTxn, type PostLine } from '@/lib/txns'
@@ -62,13 +64,19 @@ export default function TakeOut() {
   const events = useAsync(fetchActiveEvents, [])
   const items = useAsync(fetchItemAvailability, [])
 
-  const [event, setEvent] = useState<EventRecord | null>(null)
+  // Both survive a reload: ten minutes of loading a van shouldn't be undone by
+  // a phone killing the tab, or by a save that failed with no signal.
+  const [event, setEvent, clearEvent] = usePersistentState<EventRecord | null>(
+    'takeout.event',
+    null,
+  )
   const [q, setQ] = useState('')
-  const [basket, setBasket] = useState<BasketRow[]>([])
+  const [basket, setBasket, clearBasket] = usePersistentState<BasketRow[]>('takeout.basket', [])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [quickAdding, setQuickAdding] = useState(false)
   const [quickAddError, setQuickAddError] = useState<string | null>(null)
+  const idem = useIdempotencyKey()
   const voice = useVoiceRecorder()
   const [voiceResult, setVoiceResult] = useState<{ heard: string; unmatched: string[] } | null>(null)
 
@@ -190,7 +198,18 @@ export default function TakeOut() {
 
       if (lines.length === 0) throw new Error('Add something first.')
 
-      await postTxn({ type: 'OUT', lines, eventId: event.id, personId: profile.id })
+      await postTxn({
+        type: 'OUT',
+        lines,
+        eventId: event.id,
+        personId: profile.id,
+        clientUuid: idem.current(),
+      })
+      idem.reset()
+      // Saved for real — the draft has done its job.
+      clearBasket()
+      clearEvent()
+      setBasket([])
       navigate('/', { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save.')

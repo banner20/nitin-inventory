@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { supabase } from './supabase'
 import { itemMatches, type ItemAvailability } from './types'
 
 /** Records from the mic, uploads to the transcription proxy, and returns the
@@ -53,7 +54,18 @@ export function useVoiceRecorder() {
       const form = new FormData()
       form.append('audio', blob, 'audio.webm')
       if (vocabulary) form.append('vocabulary', vocabulary)
-      const res = await fetch('/api/transcribe', { method: 'POST', body: form })
+
+      // The transcription endpoint is a public URL, so it checks who's asking
+      // rather than trusting that the app is the only caller.
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData.session?.access_token
+      if (!token) throw new Error('Sign in again to use voice input.')
+
+      const res = await fetch('/api/transcribe', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      })
       const data = await res.json()
       if (!res.ok) {
         const detail = typeof data.detail === 'string' ? data.detail.slice(0, 300) : null

@@ -84,6 +84,7 @@ export async function fetchTxnHistory(
   offset: number,
   limit: number,
   type?: TxnType,
+  search?: string,
 ): Promise<TxnHistoryEntry[]> {
   let query = supabase
     .from('v_txn_history')
@@ -92,6 +93,14 @@ export async function fetchTxnHistory(
     .range(offset, offset + limit - 1)
 
   if (type) query = query.eq('type', type)
+
+  // Searched in the database, across everything, rather than filtering the
+  // page already on screen — otherwise anything past the first page reports
+  // "nothing matches", which reads as proof it never happened.
+  const needle = search?.trim().toLowerCase()
+  if (needle) {
+    query = query.ilike('search_text', `%${needle}%`)
+  }
 
   const { data, error } = await query
   if (error) throw error
