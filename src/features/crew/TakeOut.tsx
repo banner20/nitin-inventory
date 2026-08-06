@@ -9,6 +9,7 @@ import {
   AmountInput,
   amountToBase,
   defaultMode,
+  packOptions,
   type AmountMode,
 } from '@/components/AmountInput'
 import {
@@ -21,6 +22,9 @@ import {
 import { buildVoiceVocabulary, parseVoiceTranscript, useVoiceRecorder } from '@/lib/voice'
 
 interface BasketRow {
+  /** Identifies the row, not the item — a van can take the same syrup as two
+   * 700ml bottles and a 500ml one, and those are two lines. */
+  key: string
   item: ItemAvailability
   amount: string
   mode: AmountMode
@@ -28,6 +32,11 @@ interface BasketRow {
    * rather than a fresh sealed pack, so both can be taken in the same line-up
    * (e.g. two full bottles plus what's left in the one already open). */
   looseAmount: string
+}
+
+let rowSeq = 0
+function nextKey(): string {
+  return `row-${++rowSeq}`
 }
 
 function sealedBase(row: BasketRow): number {
@@ -63,18 +72,37 @@ export default function TakeOut() {
   const voice = useVoiceRecorder()
   const [voiceResult, setVoiceResult] = useState<{ heard: string; unmatched: string[] } | null>(null)
 
-  const chosen = new Set(basket.map((b) => b.item.item_id))
+  /** Which size of which item is already loaded — keyed by both, so the same
+   * item can be taken in more than one size. */
+  const chosen = new Set(basket.map((b) => `${b.item.item_id}:${b.mode}`))
 
+  // An item stays searchable while it still has a size that isn't loaded.
   const matches = useMemo(() => {
     if (!q.trim()) return []
     return (items.data ?? [])
-      .filter((i) => itemMatches(i, q) && !chosen.has(i.item_id))
+      .filter((i) => {
+        if (!itemMatches(i, q)) return false
+        const sizes = [...packOptions(i).map((o) => o.id), 'base']
+        return sizes.some((s) => !chosen.has(`${i.item_id}:${s}`))
+      })
       .slice(0, 10)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q, items.data, basket])
 
-  function patch(id: string, next: Partial<BasketRow>) {
-    setBasket((b) => b.map((x) => (x.item.item_id === id ? { ...x, ...next } : x)))
+  /** Load an item, landing on a size that isn't already in the basket. */
+  function addToBasket(item: ItemAvailability) {
+    const sizes = [...packOptions(item).map((o) => o.id), 'base']
+    const mode =
+      sizes.find((s) => !chosen.has(`${item.item_id}:${s}`)) ?? defaultMode(item)
+    setBasket((b) => [
+      ...b,
+      { key: nextKey(), item, amount: '1', mode, looseAmount: '' },
+    ])
+    setQ('')
+  }
+
+  function patch(key: string, next: Partial<BasketRow>) {
+    setBasket((b) => b.map((x) => (x.key === key ? { ...x, ...next } : x)))
   }
 
   /**
@@ -96,7 +124,10 @@ export default function TakeOut() {
         aliases: [],
       })
       const withStock = toItemAvailability(created, [])
-      setBasket((b) => [...b, { item: withStock, amount: '1', mode: defaultMode(withStock), looseAmount: '' }])
+      setBasket((b) => [
+        ...b,
+        { key: nextKey(), item: withStock, amount: '1', mode: defaultMode(withStock), looseAmount: '' },
+      ])
       setQ('')
       items.reload()
     } catch (err) {
@@ -123,7 +154,13 @@ export default function TakeOut() {
           const currentQty = Number(existing.amount) || 0
           next[existingIdx] = { ...existing, amount: String(currentQty + m.qty) }
         } else {
-          next.push({ item: m.item, amount: String(m.qty), mode: defaultMode(m.item), looseAmount: '' })
+          next.push({
+            key: nextKey(),
+            item: m.item,
+            amount: String(m.qty),
+            mode: defaultMode(m.item),
+            looseAmount: '',
+          })
         }
       }
       return next
@@ -140,8 +177,15 @@ export default function TakeOut() {
       for (const b of basket) {
         const sealed = sealedBase(b)
         const loose = looseBase(b)
-        if (sealed > 0) lines.push({ item_id: b.item.item_id, qty: sealed })
-        if (loose > 0) lines.push({ item_id: b.item.item_id, qty: loose, from_loose: true })
+        // pack_id records which size left the store, and is also what keeps
+        // two sizes of the same item from colliding as one line.
+        const packId = (b.item.alt_packs ?? []).some((p) => p.id === b.mode)
+          ? b.mode
+          : 'default'
+        if (sealed > 0) lines.push({ item_id: b.item.item_id, qty: sealed, pack_id: packId })
+        if (loose > 0) {
+          lines.push({ item_id: b.item.item_id, qty: loose, from_loose: true })
+        }
       }
 
       if (lines.length === 0) throw new Error('Add something first.')
@@ -245,8 +289,7 @@ export default function TakeOut() {
               <button
                 className="w-full text-left px-3 py-3 hover:bg-surface-hover flex justify-between gap-3 items-center"
                 onClick={() => {
-                  setBasket((b) => [...b, { item: m, amount: '1', mode: defaultMode(m), looseAmount: '' }])
-                  setQ('')
+                  addToBasket(m)
                 }}
               >
                 <span className="min-w-0">
@@ -290,23 +333,46 @@ export default function TakeOut() {
           {basket.map((row) => {
             const short = toBase(row) > Number(row.item.qty_available)
             return (
-              <li key={row.item.item_id} className="p-3 space-y-2">
+              <li key={row.key} className="p-3 space-y-2">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-sm truncate">{row.item.name}</p>
+                    <p className="text-sm truncate flex items-center gap-2">
+                      {row.item.name}
+                      {/* When the same item is loaded in two sizes, say which
+                          each row is — otherwise they're indistinguishable. */}
+                      {basket.filter((x) => x.item.item_id === row.item.item_id).length > 1 && (
+                        <span className="badge badge-brand">
+                          {packOptions(row.item).find((o) => o.id === row.mode)?.label ??
+                            row.item.unit}
+                        </span>
+                      )}
+                    </p>
                     <p className="text-xs text-fg-subtle">
                       {formatQty(row.item.qty_available, row.item)} available
                     </p>
                   </div>
-                  <button
-                    className="text-fg-subtle hover:text-bad-600 px-2"
-                    onClick={() =>
-                      setBasket((b) => b.filter((x) => x.item.item_id !== row.item.item_id))
-                    }
-                    aria-label={`Remove ${row.item.name}`}
-                  >
-                    ✕
-                  </button>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {/* Taking the same thing in two sizes is normal — two
+                        700ml bottles and a 500ml one — so it's a tap here
+                        rather than a second search. */}
+                    {packOptions(row.item).length > 1 && (
+                      <button
+                        type="button"
+                        className="btn btn-quiet h-8 min-h-8 text-xs px-2"
+                        onClick={() => addToBasket(row.item)}
+                        title="Take another size of this item too"
+                      >
+                        + size
+                      </button>
+                    )}
+                    <button
+                      className="text-fg-subtle hover:text-bad-600 px-2"
+                      onClick={() => setBasket((b) => b.filter((x) => x.key !== row.key))}
+                      aria-label={`Remove ${row.item.name}`}
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-1">
@@ -317,7 +383,7 @@ export default function TakeOut() {
                     mode={row.mode}
                     withSteppers
                     ariaLabel={`Full bottles of ${row.item.name}`}
-                    onChange={(amount, mode) => patch(row.item.item_id, { amount, mode })}
+                    onChange={(amount, mode) => patch(row.key, { amount, mode })}
                   />
                 </div>
 
@@ -331,7 +397,7 @@ export default function TakeOut() {
                         type="button"
                         className="text-xs text-brand-600 underline"
                         onClick={() =>
-                          patch(row.item.item_id, {
+                          patch(row.key, {
                             looseAmount: String(Number(row.item.qty_loose)),
                           })
                         }
@@ -353,7 +419,7 @@ export default function TakeOut() {
                             Number(e.target.value) || 0,
                             Number(row.item.qty_loose),
                           )
-                          patch(row.item.item_id, {
+                          patch(row.key, {
                             looseAmount: e.target.value === '' ? '' : String(capped),
                           })
                         }}

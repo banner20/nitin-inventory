@@ -11,12 +11,19 @@ import { formatQty, type EventCostLine, type EventRecord } from '@/lib/types'
  * spilled, or never came back.
  */
 export interface EventTotals {
-  /** Cost of stock the company no longer has. The bill. */
-  costUsed: number
   /** Cost of everything that left the store — exposure, not spend. */
   costTakenOut: number
-  /** Value of what hasn't come back yet, at today's prices. */
+  /** Cost of stock the company no longer has. The bill. */
+  costUsed: number
+  /** Cost of what came back on the shelf — value recovered, not spent. */
+  costReturned: number
+  /** Value of what hasn't come back yet. Not a headline figure — it's neither
+   * spent nor recovered — but it's what makes the other three fail to add up,
+   * so the breakdown bar still needs it. */
   costStillOut: number
+  /** Came back broken. Still owned, so not billed, but it has to appear
+   * somewhere or the breakdown won't reconcile against what went out. */
+  costDamaged: number
   itemCount: number
   /** Items with no price on file. Their quantities are real; their cost isn't
    * known, so they're excluded from the money and counted here instead. */
@@ -24,14 +31,18 @@ export interface EventTotals {
   linesStillOut: number
 }
 
+function valueOf(qty: number, unitCost: number | null): number {
+  return unitCost == null ? 0 : Number(qty) * Number(unitCost)
+}
+
 export function summarise(lines: EventCostLine[]): EventTotals {
   return {
-    costUsed: lines.reduce((s, l) => s + Number(l.cost_used ?? 0), 0),
     costTakenOut: lines.reduce((s, l) => s + Number(l.cost_taken_out ?? 0), 0),
-    costStillOut: lines.reduce(
-      (s, l) => s + (l.unit_cost == null ? 0 : Number(l.still_out) * Number(l.unit_cost)),
-      0,
-    ),
+    costUsed: lines.reduce((s, l) => s + Number(l.cost_used ?? 0), 0),
+    // Sealed and part-used both — a bottle handed back half full is back.
+    costReturned: lines.reduce((s, l) => s + Number(l.cost_back ?? 0), 0),
+    costStillOut: lines.reduce((s, l) => s + valueOf(l.still_out, l.unit_cost), 0),
+    costDamaged: lines.reduce((s, l) => s + valueOf(l.qty_damaged, l.unit_cost), 0),
     itemCount: lines.length,
     unpriced: lines.filter((l) => l.unit_cost == null).length,
     linesStillOut: lines.filter((l) => Number(l.still_out) > 0).length,
@@ -50,7 +61,9 @@ const REPORT_COLUMNS = [
   'Pack',
   'Taken out',
   'Taken out (readable)',
-  'Brought back',
+  'Brought back sealed',
+  'Brought back opened',
+  'Brought back total',
   'Served',
   'Spilled',
   'Missing',
@@ -72,7 +85,9 @@ export function buildReportCsv(lines: EventCostLine[]): string {
     Pack: l.pack_label ? `${l.pack_size} ${l.unit} per ${l.pack_label}` : '',
     'Taken out': num(l.qty_out),
     'Taken out (readable)': formatQty(l.qty_out, l),
-    'Brought back': num(l.qty_returned),
+    'Brought back sealed': num(l.qty_returned),
+    'Brought back opened': num(l.qty_returned_loose),
+    'Brought back total': num(l.qty_back_total),
     Served: num(l.qty_consumed),
     Spilled: num(l.qty_wasted),
     Missing: num(l.qty_lost),

@@ -6,6 +6,7 @@ import { fetchEventCosts } from '@/lib/queries'
 import { formatMoney, formatQty, type EventCostLine } from '@/lib/types'
 import { EmptyState, ErrorText, Loading, PageHeader, Stat } from '@/components/ui'
 import { downloadReport, summarise } from './eventReport'
+import { OutcomeBar, TopItemsChart } from './EventCharts'
 
 /**
  * What one event actually cost, on screen.
@@ -106,19 +107,18 @@ export default function EventDetail() {
         />
       ) : (
         <>
+          {/* Taken out, then what became of it, then what it involved. Read
+              left to right that's the whole event. */}
           <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
-            <Stat label="Cost of stock used" value={formatMoney(totals.costUsed)} />
             <Stat label="Value taken out" value={formatMoney(totals.costTakenOut)} />
-            <Stat
-              label={
-                totals.linesStillOut > 0
-                  ? `Still out · ${totals.linesStillOut} line${totals.linesStillOut === 1 ? '' : 's'}`
-                  : 'Still out'
-              }
-              value={formatMoney(totals.costStillOut)}
-              tone={totals.costStillOut > 0 ? 'warn' : 'neutral'}
-            />
+            <Stat label="Cost of stock used" value={formatMoney(totals.costUsed)} />
+            <Stat label="Value came back" value={formatMoney(totals.costReturned)} />
             <Stat label="Items involved" value={totals.itemCount} />
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-2 items-start">
+            <OutcomeBar totals={totals} />
+            <TopItemsChart lines={lines} />
           </div>
 
           {totals.unpriced > 0 && (
@@ -141,7 +141,12 @@ export default function EventDetail() {
                   <tr className="text-left">
                     <th className="th">Item</th>
                     <th className="th text-right">Taken out</th>
-                    <th className="th text-right">Back</th>
+                    <th
+                      className="th text-right"
+                      title="Everything that physically came back — sealed packs and part-used bottles both."
+                    >
+                      Back
+                    </th>
                     <th className="th text-right" title="Served to guests">
                       Served
                     </th>
@@ -226,7 +231,14 @@ function CostRow({ line }: { line: EventCostLine }) {
         {cell(Number(line.qty_out))}
       </td>
       <td className="px-3 py-2.5 text-right tabular whitespace-nowrap">
-        {cell(Number(line.qty_returned))}
+        {cell(Number(line.qty_back_total))}
+        {/* Say when some of it came back opened — "3 bottles back" and "2
+            bottles plus a half-empty one" are different facts. */}
+        {Number(line.qty_returned_loose) > 0 && (
+          <span className="block text-[11px] text-fg-subtle">
+            incl. {formatQty(line.qty_returned_loose, line)} opened
+          </span>
+        )}
       </td>
       <td className="px-3 py-2.5 text-right tabular whitespace-nowrap">
         {cell(Number(line.qty_consumed))}

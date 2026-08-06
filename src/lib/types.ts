@@ -138,7 +138,13 @@ export interface EventCostLine {
   pack_label: string | null
   unit_cost: number | null
   qty_out: number
+  /** Came back sealed and unopened. */
   qty_returned: number
+  /** Came back part-used, in an opened bottle. Still on the shelf, so it
+   * counts as returned — it just isn't a full pack any more. */
+  qty_returned_loose: number
+  /** Everything that physically came back, sealed or not. */
+  qty_back_total: number
   qty_consumed: number
   qty_wasted: number
   qty_damaged: number
@@ -148,6 +154,7 @@ export interface EventCostLine {
   qty_used: number
   cost_used: number | null
   cost_taken_out: number | null
+  cost_back: number | null
 }
 
 /** One purchase of an item, for the price trail on the edit form. */
