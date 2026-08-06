@@ -518,6 +518,18 @@ function EventStep({
 }
 
 /**
+ * The end of a day N days from now, rather than N×24h from this moment.
+ * "Back today" set at 6pm has to mean tonight, not 6pm — otherwise a job
+ * created during service is overdue before the van has left.
+ */
+function endOfDayAfter(days: number): Date {
+  const d = new Date()
+  d.setDate(d.getDate() + days)
+  d.setHours(23, 59, 59, 999)
+  return d
+}
+
+/**
  * Deliberately just a name and a finish time. Anything more is admin, and the
  * person standing next to a loaded van shouldn't be doing admin — a manager can
  * fill in the client and venue afterwards.
@@ -530,7 +542,8 @@ function QuickEventForm({
   onCancel: () => void
 }) {
   const [name, setName] = useState('')
-  const [days, setDays] = useState(1)
+  // Most jobs go out and come back the same night, so that's the default.
+  const [days, setDays] = useState(0)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -540,11 +553,10 @@ function QuickEventForm({
     setError(null)
     try {
       const now = new Date()
-      const end = new Date(now.getTime() + days * 24 * 60 * 60 * 1000)
       const created = await createEvent({
         name,
         startsAt: now.toISOString(),
-        endsAt: end.toISOString(),
+        endsAt: endOfDayAfter(days).toISOString(),
       })
       onCreated(created)
     } catch (err) {
@@ -572,8 +584,9 @@ function QuickEventForm({
 
       <div className="space-y-1.5">
         <span className="text-sm text-fg-muted">Back by</span>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-4 gap-2">
           {[
+            { d: 0, label: 'Tonight' },
             { d: 1, label: 'Tomorrow' },
             { d: 2, label: '2 days' },
             { d: 4, label: '4 days' },

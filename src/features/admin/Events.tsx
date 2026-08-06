@@ -146,7 +146,11 @@ function EventRow({
 
 function NewEventForm({ onCreated }: { onCreated: (name: string) => void }) {
   const now = new Date()
-  const later = new Date(now.getTime() + 6 * 60 * 60 * 1000)
+  // Most jobs go out and come back the same night, so end-of-today is the
+  // default here too — six hours from now lands mid-service and marks the
+  // job overdue while the bar is still running.
+  const later = new Date()
+  later.setHours(23, 59, 0, 0)
 
   const [name, setName] = useState('')
   const [client, setClient] = useState('')
