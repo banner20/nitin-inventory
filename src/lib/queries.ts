@@ -136,6 +136,25 @@ export async function fetchEventCosts(eventId: string): Promise<EventCostLine[]>
   return (data ?? []) as EventCostLine[]
 }
 
+/**
+ * Did a previous attempt with this key actually land?
+ *
+ * The ledger keys every transaction by the id the device generated, so a
+ * request that succeeded just as the signal died can be recognised after the
+ * fact — which is the difference between "save it again" and "it's already
+ * saved, stop worrying".
+ */
+export async function findTxnByClientUuid(clientUuid: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('txns')
+    .select('id')
+    .eq('client_uuid', clientUuid)
+    .maybeSingle()
+
+  if (error) return null
+  return (data as { id: string } | null)?.id ?? null
+}
+
 export async function fetchProfiles(): Promise<Profile[]> {
   const { data, error } = await supabase
     .from('profiles')

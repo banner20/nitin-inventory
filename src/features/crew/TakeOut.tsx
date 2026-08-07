@@ -1,10 +1,10 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { useAsync } from '@/lib/useAsync'
 import { useIdempotencyKey } from '@/lib/useIdempotencyKey'
 import { usePersistentState } from '@/lib/usePersistentState'
-import { fetchItemAvailability } from '@/lib/queries'
+import { fetchItemAvailability, findTxnByClientUuid } from '@/lib/queries'
 import { createEvent, fetchActiveEvents } from '@/lib/events'
 import { createItem, postTxn, type PostLine } from '@/lib/txns'
 import {
@@ -76,9 +76,86 @@ export default function TakeOut() {
   const [error, setError] = useState<string | null>(null)
   const [quickAdding, setQuickAdding] = useState(false)
   const [quickAddError, setQuickAddError] = useState<string | null>(null)
-  const idem = useIdempotencyKey()
+  /** Reassurance after a dropped connection turned out to have saved anyway. */
+  const [settled, setSettled] = useState<string | null>(null)
+  // Stored, because the basket it belongs to is stored too.
+  const idem = useIdempotencyKey('takeout.idempotency')
   const voice = useVoiceRecorder()
   const [voiceResult, setVoiceResult] = useState<{ heard: string; unmatched: string[] } | null>(null)
+
+  /**
+   * Settle any attempt left hanging by a lost connection.
+   *
+   * If a key survived from last time, the previous save either never reached
+   * the server or reached it and the reply was lost on the way back. Asking
+   * the ledger settles it: if that transaction exists the stock is already
+   * signed out, so the basket is cleared and the crew told — rather than left
+   * looking at a full van they're tempted to save a second time.
+   */
+  useEffect(() => {
+    const key = idem.pending()
+    if (!key || basket.length === 0) return
+    let cancelled = false
+
+    findTxnByClientUuid(key).then((txnId) => {
+      if (cancelled || !txnId) return
+      idem.reset()
+      clearBasket()
+      clearEvent()
+      setBasket([])
+      setEvent(null)
+      setSettled('That load had already saved — the connection just dropped before it could say so.')
+    })
+
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  /**
+   * A saved event can go stale — closed by a manager, or deleted outright
+   * during a stocktake. Posting against one fails deep in the database with a
+   * foreign-key error nobody can act on, so it's checked here instead: if the
+   * job is no longer open, say so and send them back to pick a live one. The
+   * basket is deliberately kept, since the stock in the van is still real.
+   */
+  useEffect(() => {
+    if (!event || !events.data) return
+    const live = events.data.find((e) => e.id === event.id)
+    if (live) {
+      // Also refresh it, in case the name or return date moved on.
+      if (live.name !== event.name || live.ends_at !== event.ends_at) setEvent(live)
+      return
+    }
+    setEvent(null)
+    setError(
+      `“${event.name}” is no longer open, so what you'd loaded couldn't stay attached to it. Pick the job again — your items are still here.`,
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [events.data])
+
+  /**
+   * A saved basket carries a copy of each item as it looked when it was added,
+   * so a basket reopened the next morning would show yesterday's "5 bottles
+   * available" beside today's stock. The quantities typed in are the crew's
+   * and stay untouched; everything read off the item — what's available, how
+   * it's packed — is refreshed from the server the moment it arrives.
+   */
+  useEffect(() => {
+    if (!items.data || basket.length === 0) return
+    setBasket((rows) => {
+      let changed = false
+      const next = rows.map((row) => {
+        const fresh = items.data!.find((i) => i.item_id === row.item.item_id)
+        if (!fresh || fresh === row.item) return row
+        changed = true
+        return { ...row, item: fresh }
+      })
+      return changed ? next : rows
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items.data])
 
   /** Which size of which item is already loaded — keyed by both, so the same
    * item can be taken in more than one size. */
@@ -225,6 +302,12 @@ export default function TakeOut() {
         events={events.data ?? []}
         loading={events.loading}
         error={events.error}
+        /* Whatever sent them back here — a job that closed, or a save that
+           had already gone through — has to be readable on this screen, not
+           the one they were bounced off. */
+        notice={settled}
+        warning={error}
+        basketCount={basket.length}
         onPick={setEvent}
         onCreated={(e) => {
           events.reload()
@@ -281,6 +364,18 @@ export default function TakeOut() {
       </div>
 
       {voice.error && <p className="text-sm text-bad-600">{voice.error}</p>}
+
+      {settled && (
+        <div className="rounded-lg border border-good-200 bg-good-50 px-3 py-2.5 flex items-start justify-between gap-3">
+          <p className="text-sm text-good-700">{settled}</p>
+          <button
+            className="text-xs font-medium text-good-700 shrink-0"
+            onClick={() => setSettled(null)}
+          >
+            OK
+          </button>
+        </div>
+      )}
 
       {voiceResult && (
         <div className="card p-3 space-y-1.5 text-sm">
@@ -478,12 +573,18 @@ function EventStep({
   events,
   loading,
   error,
+  notice,
+  warning,
+  basketCount,
   onPick,
   onCreated,
 }: {
   events: EventRecord[]
   loading: boolean
   error: Error | null
+  notice?: string | null
+  warning?: string | null
+  basketCount?: number
   onPick: (e: EventRecord) => void
   onCreated: (e: EventRecord) => void
 }) {
@@ -495,6 +596,29 @@ function EventStep({
         <h1 className="text-lg font-semibold">Taking stock out</h1>
         <p className="text-sm text-fg-muted">Which event is this for?</p>
       </header>
+
+      {notice && (
+        <div className="rounded-lg border border-good-200 bg-good-50 px-3 py-2.5">
+          <p className="text-sm text-good-700">{notice}</p>
+        </div>
+      )}
+
+      {warning && (
+        <div className="rounded-lg border border-warn-200 bg-warn-50 px-3 py-2.5">
+          <p className="text-sm text-warn-700">{warning}</p>
+        </div>
+      )}
+
+      {/* The van is still loaded even though the job it was for has gone.
+          Saying so stops it looking like the basket was lost. */}
+      {!warning && !notice && (basketCount ?? 0) > 0 && (
+        <div className="rounded-lg border border-line bg-surface-alt px-3 py-2.5">
+          <p className="text-sm text-fg-muted">
+            You still have {basketCount} item{basketCount === 1 ? '' : 's'} loaded. Pick a job
+            to carry on.
+          </p>
+        </div>
+      )}
 
       {loading && <p className="text-sm text-fg-muted">Loading…</p>}
       {error && <p className="text-sm text-bad-600">{error.message}</p>}
