@@ -65,7 +65,11 @@ export default function AdminShell() {
 
   return (
     <div className="min-h-dvh grid grid-cols-[15rem_1fr] max-lg:grid-cols-1 bg-canvas">
-      <aside className="border-r border-line bg-surface flex flex-col max-lg:hidden">
+      {/* Pinned to the viewport, not the page. Without this the sidebar grows
+          to match however tall the master sheet is, which pushes Crew view and
+          Sign out hundreds of pixels below the fold — you had to scroll a
+          124-row table to reach them. The nav scrolls inside instead. */}
+      <aside className="border-r border-line bg-surface flex flex-col max-lg:hidden sticky top-0 h-dvh">
         <div className="h-14 flex items-center gap-2.5 px-4 border-b border-line">
           <img src="/icon.svg" alt="" className="size-6" />
           <span className="font-semibold text-sm">Inventory</span>
