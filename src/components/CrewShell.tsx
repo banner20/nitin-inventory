@@ -1,13 +1,19 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import clsx from 'clsx'
 import { useAuth } from '@/features/auth/AuthProvider'
-import { IconHome, IconIn, IconOut, IconUser } from './icons'
+import { IconClock, IconHome, IconIn, IconOut } from './icons'
 
+/**
+ * Four tabs, and they cost a quarter of the bar each — so they go to the four
+ * things done most. History is checked constantly (what did I take out, did
+ * that return record) while Me is a password change once a year, so it moves
+ * up to the profile in the header where it belongs anyway.
+ */
 const tabs = [
   { to: '/', label: 'Home', Icon: IconHome, end: true },
   { to: '/out', label: 'Take out', Icon: IconOut, end: false },
   { to: '/in', label: 'Bring back', Icon: IconIn, end: false },
-  { to: '/me', label: 'Me', Icon: IconUser, end: false },
+  { to: '/history', label: 'History', Icon: IconClock, end: false },
 ]
 
 /**
@@ -28,18 +34,42 @@ export default function CrewShell() {
     <div className="min-h-dvh flex flex-col bg-canvas">
       <header className="sticky top-0 z-10 bg-surface/90 backdrop-blur border-b border-line">
         <div className="flex items-center gap-3 px-4 h-14">
-          <span
-            aria-hidden="true"
-            className="size-8 shrink-0 rounded-full bg-brand-50 text-brand-700 grid place-items-center text-xs font-semibold"
+          {/* The whole name block is the way into your account now that Me has
+              given up its tab. A person's own name is the obvious place to
+              tap for their own settings. */}
+          <NavLink
+            to="/me"
+            className={({ isActive }) =>
+              clsx(
+                'flex items-center gap-3 min-w-0 flex-1 -mx-2 px-2 py-1 rounded-lg transition-colors',
+                isActive ? 'bg-brand-50' : 'hover:bg-surface-hover',
+              )
+            }
           >
-            {initials || '·'}
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold truncate">
-              {profile?.full_name ?? 'Loading…'}
-            </p>
-            <p className="text-xs text-fg-subtle truncate">{profile?.emp_code}</p>
-          </div>
+            {({ isActive }) => (
+              <>
+                <span
+                  aria-hidden="true"
+                  className={clsx(
+                    'size-8 shrink-0 rounded-full grid place-items-center text-xs font-semibold transition-colors',
+                    isActive
+                      ? 'bg-brand-600 text-white'
+                      : 'bg-brand-50 text-brand-700',
+                  )}
+                >
+                  {initials || '·'}
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold truncate">
+                    {profile?.full_name ?? 'Loading…'}
+                  </span>
+                  <span className="block text-xs text-fg-subtle truncate">
+                    {profile?.emp_code}
+                  </span>
+                </span>
+              </>
+            )}
+          </NavLink>
           {isManager && (
             <NavLink to="/admin" className="btn btn-ghost h-9 min-h-9 text-sm px-3">
               Admin
