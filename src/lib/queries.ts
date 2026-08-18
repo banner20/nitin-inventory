@@ -155,6 +155,21 @@ export async function findTxnByClientUuid(clientUuid: string): Promise<string | 
   return (data as { id: string } | null)?.id ?? null
 }
 
+/**
+ * Withdraw an entry that was recorded wrongly.
+ *
+ * Nothing is edited or deleted — the entry stays exactly as it was written,
+ * marked void, and simply stops counting. Whatever it moved goes back to where
+ * it was, so the corrected version can be recorded fresh.
+ */
+export async function voidTxn(txnId: string, reason: string): Promise<void> {
+  const { error } = await supabase.rpc('void_txn', {
+    p_txn_id: txnId,
+    p_reason: reason.trim() || null,
+  })
+  if (error) throw new Error(error.message)
+}
+
 export async function fetchProfiles(): Promise<Profile[]> {
   const { data, error } = await supabase
     .from('profiles')

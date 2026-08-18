@@ -415,6 +415,13 @@ export interface TxnHistoryEntry {
   txn_id: string
   type: TxnType
   status: TxnStatus
+  /** Who wrote it — the only person besides a manager who may withdraw it. */
+  created_by: string | null
+  /** Set once withdrawn. The entry stays exactly as written; it just stops
+   * counting, so the stock returns to where it was before. */
+  voided_at: string | null
+  void_reason: string | null
+  voided_by_name: string | null
   source: TxnSource
   note: string | null
   occurred_at: string
