@@ -405,6 +405,13 @@ export default function ItemForm({
             different price updates that size on its own — set a price here only for stock
             you already had.
           </p>
+          {/* The columns read Size / Called / Cost each, which invites "so
+              where's the quantity?" — it's one field, further up, because
+              stock is held as a single total rather than a count per size. */}
+          <p className="text-xs text-fg-subtle">
+            Prices only — how much you have is the one figure above, whichever size you
+            count it in.
+          </p>
         </div>
 
         <div className="rounded-lg border border-line overflow-hidden">
