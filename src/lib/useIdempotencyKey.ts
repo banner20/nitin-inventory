@@ -18,6 +18,13 @@ import { useRef } from 'react'
  */
 export function useIdempotencyKey(storageKey?: string) {
   const ref = useRef<string | null>(null)
+  /**
+   * One submission can become several transactions — returning a van that two
+   * people loaded posts one per person, because a transaction belongs to a
+   * single holder. Each needs its own key, and each needs the *same* key on a
+   * retry, so they're kept together under the one storage entry.
+   */
+  const parts = useRef<Record<string, string>>({})
 
   function read(): string | null {
     if (ref.current) return ref.current
@@ -28,6 +35,17 @@ export function useIdempotencyKey(storageKey?: string) {
     } catch {
       return null
     }
+  }
+
+  function readParts(): Record<string, string> {
+    if (Object.keys(parts.current).length > 0) return parts.current
+    if (!storageKey) return parts.current
+    try {
+      parts.current = JSON.parse(localStorage.getItem(`${storageKey}.parts`) ?? '{}')
+    } catch {
+      parts.current = {}
+    }
+    return parts.current
   }
 
   return {
@@ -61,12 +79,33 @@ export function useIdempotencyKey(storageKey?: string) {
       return fresh
     },
 
+    /**
+     * A key for one part of a multi-transaction submission — one per person
+     * whose stock is coming back. Stable across retries, like `current`.
+     */
+    forPart(partId: string): string {
+      const map = readParts()
+      if (!map[partId]) {
+        map[partId] = crypto.randomUUID()
+        if (storageKey) {
+          try {
+            localStorage.setItem(`${storageKey}.parts`, JSON.stringify(map))
+          } catch {
+            /* still safe within this page's lifetime */
+          }
+        }
+      }
+      return map[partId]
+    },
+
     /** Call after a successful post: the next one is a different transaction. */
     reset(): void {
       ref.current = null
+      parts.current = {}
       if (storageKey) {
         try {
           localStorage.removeItem(storageKey)
+          localStorage.removeItem(`${storageKey}.parts`)
         } catch {
           /* nothing useful to do */
         }

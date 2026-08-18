@@ -4,7 +4,7 @@ import clsx from 'clsx'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { useAsync } from '@/lib/useAsync'
 import { useIdempotencyKey } from '@/lib/useIdempotencyKey'
-import { fetchMyOpenBalances } from '@/lib/queries'
+import { fetchAllOpenBalances } from '@/lib/queries'
 import { postTxn, type PostLine } from '@/lib/txns'
 import {
   AmountInput,
@@ -79,13 +79,16 @@ function defaultReason(b: OpenBalance): LineCondition {
 export default function BringBack() {
   const { profile } = useAuth()
   const navigate = useNavigate()
-  const personId = profile?.id
-  const balances = useAsync(
-    () => (personId ? fetchMyOpenBalances(personId) : Promise.resolve([])),
-    [personId],
-  )
+  /**
+   * Everyone's open stock, not just your own. The van comes back and whoever
+   * loaded it may be off shift — refusing to let anyone else hand it in
+   * doesn't protect the count, it just leaves the books wrong. The balance
+   * still clears against whoever took it out, and the history records who
+   * actually did the handing in.
+   */
+  const balances = useAsync(fetchAllOpenBalances, [])
 
-  const idem = useIdempotencyKey()
+  const idem = useIdempotencyKey('bringback.idempotency')
   const [eventId, setEventId] = useState<string | null>(null)
   const [rows, setRows] = useState<Row[]>([])
   const [busy, setBusy] = useState(false)
@@ -131,7 +134,9 @@ export default function BringBack() {
     setBusy(true)
     setError(null)
     try {
-      const lines: PostLine[] = []
+      // A transaction belongs to one holder, so stock loaded by two people
+      // comes back as two transactions — each clearing that person's balance.
+      const byPerson = new Map<string, PostLine[]>()
       for (const row of rows) {
         const total = Math.min(toBase(row), Number(row.bal.outstanding))
         const gap = Number(row.bal.outstanding) - total
@@ -140,19 +145,26 @@ export default function BringBack() {
         // gives way first since it's the softer of the two claims.
         const sealed = Math.min(sealedBase(row), total)
         const loose = Math.max(0, total - sealed)
+
+        const lines = byPerson.get(row.bal.person_id) ?? []
         if (sealed > 0) lines.push({ item_id: row.bal.item_id, qty: sealed, condition: 'ok' })
         if (loose > 0) lines.push({ item_id: row.bal.item_id, qty: loose, condition: 'loose' })
         if (gap > 0) lines.push({ item_id: row.bal.item_id, qty: gap, condition: row.reason })
+        if (lines.length > 0) byPerson.set(row.bal.person_id, lines)
       }
-      if (lines.length === 0) throw new Error('Nothing to record.')
+      if (byPerson.size === 0) throw new Error('Nothing to record.')
 
-      await postTxn({
-        type: 'IN',
-        lines,
-        eventId,
-        personId: profile.id,
-        clientUuid: idem.current(),
-      })
+      for (const [holderId, lines] of byPerson) {
+        await postTxn({
+          type: 'IN',
+          lines,
+          eventId,
+          // Whose balance this clears — the person who signed it out, not
+          // whoever is standing here handing it back. created_by records that.
+          personId: holderId,
+          clientUuid: idem.forPart(`${eventId}:${holderId}`),
+        })
+      }
       idem.reset()
       navigate('/', { replace: true })
     } catch (err) {
@@ -169,7 +181,10 @@ export default function BringBack() {
       <div className="space-y-4">
         <header>
           <h1 className="text-lg font-semibold">Bringing stock back</h1>
-          <p className="text-sm text-fg-muted">Which event are you returning from?</p>
+          <p className="text-sm text-fg-muted">
+            Which event are you returning from? Anyone's stock — you don't have to be
+            the one who took it out.
+          </p>
         </header>
 
         {balances.loading && <p className="text-sm text-fg-muted">Loading…</p>}
@@ -177,7 +192,7 @@ export default function BringBack() {
 
         {!balances.loading && events.length === 0 && (
           <div className="card p-6 text-center text-sm text-fg-muted">
-            You have nothing signed out. Nothing to bring back.
+            Nothing is signed out. Nothing to bring back.
           </div>
         )}
 
@@ -195,6 +210,12 @@ export default function BringBack() {
                   <p className="text-sm text-fg-muted">
                     {lines.length} item{lines.length === 1 ? '' : 's'} still out
                     {first.overdue && <span className="text-warn-600"> · overdue</span>}
+                  </p>
+                  {/* Whose it is, up front — so you know before you open it
+                      whether you're handing back your own or covering for
+                      someone who's gone home. */}
+                  <p className="text-xs text-fg-subtle mt-0.5">
+                    {[...new Set(lines.map((l) => l.person_name))].join(', ')}
                   </p>
                 </button>
               </li>
@@ -250,14 +271,24 @@ export default function BringBack() {
 
           return (
             <li
-              key={row.bal.item_id}
+              key={`${row.bal.item_id}-${row.bal.person_id}`}
               className={clsx(
                 'card p-4 space-y-3',
                 flagged && 'border-warn-300',
               )}
             >
               <div className="flex items-baseline justify-between gap-3">
-                <p className="text-sm font-medium truncate">{row.bal.item_name}</p>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{row.bal.item_name}</p>
+                  {/* Always say whose it is. Returning someone else's stock is
+                      normal now, and the person handing it in needs to see
+                      whose balance they're clearing. */}
+                  <p className="text-xs text-fg-subtle truncate">
+                    {row.bal.person_id === profile?.id
+                      ? 'Yours'
+                      : `${row.bal.person_name} took this out`}
+                  </p>
+                </div>
                 <p className="text-xs text-fg-muted shrink-0">{formatQty(out, row.bal)} out</p>
               </div>
 
