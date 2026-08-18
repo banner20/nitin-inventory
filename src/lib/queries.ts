@@ -170,6 +170,32 @@ export async function voidTxn(txnId: string, reason: string): Promise<void> {
   if (error) throw new Error(error.message)
 }
 
+/**
+ * Correct an entry in one step.
+ *
+ * Not an overwrite: the corrected version is written and the original is
+ * withdrawn together, linked, so history keeps both. One action for the person
+ * fixing a typo, no gap in the record afterwards.
+ */
+export async function amendTxn(
+  txnId: string,
+  lines: {
+    item_id: string
+    qty: number
+    condition?: string | null
+    from_loose?: boolean
+  }[],
+  reason: string,
+): Promise<string> {
+  const { data, error } = await supabase.rpc('amend_txn', {
+    p_txn_id: txnId,
+    p_lines: lines,
+    p_reason: reason.trim() || null,
+  })
+  if (error) throw new Error(error.message)
+  return data as string
+}
+
 export async function fetchProfiles(): Promise<Profile[]> {
   const { data, error } = await supabase
     .from('profiles')

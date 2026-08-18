@@ -399,11 +399,13 @@ export interface DraftLine {
 /** One line within a history entry — enough pack info to format it the same
  * way as everywhere else in the app. */
 export interface TxnHistoryLine {
+  item_id: string
   item_name: string
   unit: string
   qty: number
   condition: LineCondition | null
   from_quarantine: boolean
+  from_loose: boolean
   unit_cost: number | null
   vendor: string | null
   pack_size: number
@@ -422,6 +424,11 @@ export interface TxnHistoryEntry {
   voided_at: string | null
   void_reason: string | null
   voided_by_name: string | null
+  /** Set when this entry corrects an earlier one, which is voided in the same
+   * breath. Both stay readable — the mistake and the fix. */
+  replaces_txn_id: string | null
+  /** True when a later entry supersedes this one. */
+  was_corrected: boolean | null
   source: TxnSource
   note: string | null
   occurred_at: string

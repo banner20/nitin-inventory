@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import clsx from 'clsx'
-import { fetchTxnHistory, voidTxn } from '@/lib/queries'
+import { amendTxn, fetchTxnHistory, voidTxn } from '@/lib/queries'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { formatPacks } from '@/lib/types'
 import type { TxnHistoryEntry, TxnType } from '@/lib/types'
@@ -163,9 +163,12 @@ function HistoryRow({
 }) {
   const { profile, isManager } = useAuth()
   const [confirming, setConfirming] = useState(false)
+  const [editing, setEditing] = useState(false)
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /** The quantities as typed, in the item's own pack, keyed by line index. */
+  const [draft, setDraft] = useState<Record<number, string>>({})
 
   const who = entry.actor_name
     ? `${entry.actor_name}${entry.actor_emp_code ? ` (${entry.actor_emp_code})` : ''}`
@@ -177,6 +180,51 @@ function HistoryRow({
   // Your own slip is yours to fix; someone else's is a manager's call. The
   // database enforces this too — this only decides whether to offer it.
   const canUndo = !voided && (isManager || entry.created_by === profile?.id)
+  const lines = entry.lines ?? []
+
+  /** Pack-size helper: quantities are stored in base units but read and typed
+   * in whole bottles, same as everywhere else. */
+  const sizeOf = (l: (typeof lines)[number]) =>
+    l.pack_label && Number(l.pack_size) > 1 ? Number(l.pack_size) : 1
+
+  function startEditing() {
+    setDraft(
+      Object.fromEntries(
+        lines.map((l, i) => [i, String(Number((Number(l.qty) / sizeOf(l)).toFixed(3)))]),
+      ),
+    )
+    setError(null)
+    setEditing(true)
+  }
+
+  async function saveEdit() {
+    setBusy(true)
+    setError(null)
+    try {
+      const next = lines
+        .map((l, i) => ({
+          item_id: l.item_id,
+          qty: Number((Number(draft[i] ?? 0) * sizeOf(l)).toFixed(3)),
+          condition: l.condition,
+          from_loose: l.from_loose,
+        }))
+        // A line dropped to zero is a line removed. All of them at zero means
+        // the entry shouldn't exist — undo it instead, which the DB enforces.
+        .filter((l) => l.qty > 0)
+
+      if (next.length === 0) {
+        throw new Error('Everything is zero — use "Undo this entry" instead.')
+      }
+
+      await amendTxn(entry.txn_id, next, reason)
+      setEditing(false)
+      onVoided()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save that.')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function undo() {
     setBusy(true)
@@ -238,28 +286,85 @@ function HistoryRow({
         </p>
       )}
 
+      {entry.replaces_txn_id && (
+        <p className="text-xs text-good-700">Corrects an earlier entry.</p>
+      )}
+
       {entry.note && <p className="text-sm text-fg-muted italic">“{entry.note}”</p>}
 
-      {entry.lines && entry.lines.length > 0 && (
+      {lines.length > 0 && (
         <ul className="text-sm divide-y divide-line border-t border-line -mx-4 px-4">
-          {entry.lines.map((line, i) => (
+          {lines.map((line, i) => (
             <li key={i} className="py-1.5 flex items-center justify-between gap-3">
               <span className="text-sm truncate">{line.item_name}</span>
-              <span className="text-fg-muted tabular shrink-0 flex items-center gap-2">
-                {formatPacks(line.qty, line)}
-                {line.condition && line.condition !== 'ok' && (
-                  <span className="text-xs text-warn-600">
-                    {CONDITION_LABEL[line.condition] ?? line.condition}
+              {editing ? (
+                /* Typed in whole bottles, like everywhere else; converted back
+                   to base units on save. Zero drops the line. */
+                <span className="flex items-center gap-2 shrink-0">
+                  <input
+                    className="input tabular text-center w-20 h-9 min-h-9"
+                    type="number"
+                    min={0}
+                    step="any"
+                    value={draft[i] ?? ''}
+                    onChange={(e) => setDraft((d) => ({ ...d, [i]: e.target.value }))}
+                    aria-label={`Amount of ${line.item_name}`}
+                  />
+                  <span className="text-xs text-fg-muted w-16">
+                    {line.pack_label && Number(line.pack_size) > 1
+                      ? `${line.pack_label}s`
+                      : line.unit}
                   </span>
-                )}
-                {line.vendor && <span className="text-xs text-fg-subtle">· {line.vendor}</span>}
-              </span>
+                </span>
+              ) : (
+                <span className="text-fg-muted tabular shrink-0 flex items-center gap-2">
+                  {formatPacks(line.qty, line)}
+                  {line.condition && line.condition !== 'ok' && (
+                    <span className="text-xs text-warn-600">
+                      {CONDITION_LABEL[line.condition] ?? line.condition}
+                    </span>
+                  )}
+                  {line.vendor && <span className="text-xs text-fg-subtle">· {line.vendor}</span>}
+                </span>
+              )}
             </li>
           ))}
         </ul>
       )}
 
-      {canUndo && (
+      {canUndo && editing && (
+        <div className="rounded-lg border border-brand-200 bg-brand-50 p-3 space-y-2">
+          <p className="text-sm text-brand-700">
+            Change the amounts above, then save. The original stays in the history marked
+            as corrected — nothing is rewritten.
+          </p>
+          <input
+            className="input h-9 min-h-9 text-sm"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="What was wrong with it? (optional)"
+          />
+          {error && <p className="text-xs text-bad-600">{error}</p>}
+          <div className="flex gap-2">
+            <button
+              className="btn btn-primary h-9 min-h-9 text-sm px-3"
+              onClick={() => void saveEdit()}
+              disabled={busy}
+            >
+              {busy ? 'Saving…' : 'Save correction'}
+            </button>
+            <button
+              className="btn btn-ghost h-9 min-h-9 text-sm px-3"
+              onClick={() => setEditing(false)}
+              disabled={busy}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {canUndo && !editing && (
         <div className="pt-1">
           {confirming ? (
             <div className="rounded-lg border border-warn-200 bg-warn-50 p-3 space-y-2">
@@ -294,12 +399,20 @@ function HistoryRow({
               </div>
             </div>
           ) : (
-            <button
-              className="text-xs font-medium text-fg-muted hover:text-bad-600"
-              onClick={() => setConfirming(true)}
-            >
-              Undo this entry
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                className="text-xs font-medium text-brand-600 hover:text-brand-700"
+                onClick={startEditing}
+              >
+                Edit amounts
+              </button>
+              <button
+                className="text-xs font-medium text-fg-muted hover:text-bad-600"
+                onClick={() => setConfirming(true)}
+              >
+                Undo this entry
+              </button>
+            </div>
           )}
         </div>
       )}
