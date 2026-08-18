@@ -396,13 +396,24 @@ export default function StockIn() {
               </div>
 
               <div className="flex flex-wrap items-end gap-3">
-                <AmountInput
-                  item={r.item}
-                  amount={r.amount}
-                  mode={r.mode}
-                  ariaLabel={`Quantity of ${r.item.name}`}
-                  onChange={(amount, mode) => onAmountChange(r, amount, mode)}
-                />
+                {/* Labelled, because it wasn't. The size pills and the cost
+                    field both announced themselves while the number between
+                    them — the actual quantity, the whole point of the row —
+                    sat bare and got read straight past. */}
+                <div className="space-y-1.5">
+                  <span className="block text-xs text-fg-muted">
+                    How many arrived
+                    {r.item.pack_label ? ` (${r.item.pack_label}s)` : ''}?
+                  </span>
+                  <AmountInput
+                    item={r.item}
+                    amount={r.amount}
+                    mode={r.mode}
+                    withSteppers
+                    ariaLabel={`How many ${r.item.name} arrived`}
+                    onChange={(amount, mode) => onAmountChange(r, amount, mode)}
+                  />
+                </div>
 
                 <label className="space-y-1.5">
                   <span className="block text-xs text-fg-muted">Cost each</span>
