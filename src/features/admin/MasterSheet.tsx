@@ -10,9 +10,87 @@ import {
   itemMatches,
   type ItemAvailability,
 } from '@/lib/types'
+import { downloadTextFile, objectsToCsv } from '@/lib/csv'
 import { EmptyState, ErrorText, Loading, PageHeader, Stat } from '@/components/ui'
 import ImportItems from './ImportItems'
 import ItemForm from './ItemForm'
+
+/**
+ * The master sheet as a spreadsheet.
+ *
+ * Exports whatever is on screen — filters and sort included — because someone
+ * who has just narrowed the list to "below minimum" wants that list, not all
+ * 208 rows again. Numbers go out as plain figures a spreadsheet can total,
+ * with the readable form beside them, same convention as the accounts report.
+ */
+const EXPORT_COLUMNS = [
+  'Item',
+  'Category',
+  'Type',
+  'Unit',
+  'Pack size',
+  'Pack name',
+  'Owned',
+  'Owned (readable)',
+  'Out',
+  'Damaged',
+  'Available',
+  'Available (readable)',
+  'Of which loose',
+  'Minimum',
+  'Price per pack',
+  'Stock value',
+  'Expires',
+  'Needs review',
+  'SKU',
+  'Also known as',
+]
+
+function exportRows(rows: ItemAvailability[]): void {
+  const num = (n: number | null | undefined) => (n == null ? '' : String(Number(n)))
+
+  const out: Record<string, string>[] = rows.map((r) => ({
+    Item: r.name,
+    Category: r.category_name ?? '',
+    Type: r.kind,
+    Unit: r.unit,
+    'Pack size': String(Number(r.pack_size)),
+    'Pack name': r.pack_label ?? '',
+    Owned: num(r.qty_owned),
+    'Owned (readable)': formatQty(r.qty_owned, r),
+    Out: num(r.qty_out),
+    Damaged: num(r.qty_quarantined),
+    Available: num(r.qty_available),
+    'Available (readable)': formatQty(r.qty_available, r),
+    'Of which loose': num(r.qty_loose),
+    Minimum: num(r.min_stock),
+    'Price per pack':
+      r.unit_cost == null ? '' : String(Number((r.unit_cost * Number(r.pack_size)).toFixed(2))),
+    'Stock value': r.stock_value == null ? '' : String(Number(r.stock_value)),
+    Expires: r.expiry_date ?? '',
+    'Needs review': r.needs_review ? 'yes' : '',
+    SKU: r.sku ?? '',
+    'Also known as': (r.aliases ?? []).join('; '),
+  }))
+
+  const totalValue = rows.reduce((s, r) => s + Number(r.stock_value ?? 0), 0)
+  const unpriced = rows.filter((r) => r.unit_cost == null).length
+
+  out.push({
+    ...Object.fromEntries(EXPORT_COLUMNS.map((c) => [c, ''])),
+    Item: 'TOTAL',
+    'Stock value': String(Number(totalValue.toFixed(2))),
+  })
+  if (unpriced > 0) {
+    out.push({
+      ...Object.fromEntries(EXPORT_COLUMNS.map((c) => [c, ''])),
+      Item: `Note: ${unpriced} item${unpriced === 1 ? '' : 's'} have no price on file and are not in the total.`,
+    })
+  }
+
+  const stamp = new Date().toISOString().slice(0, 10)
+  downloadTextFile(`${stamp}-master-sheet.csv`, objectsToCsv(out, EXPORT_COLUMNS))
+}
 
 type SortKey = 'name' | 'qty_available' | 'qty_out' | 'qty_owned'
 
@@ -23,6 +101,7 @@ export default function MasterSheet() {
   const [categoryId, setCategoryId] = useState<string>('')
   const [onlyLow, setOnlyLow] = useState(false)
   const [onlyMismatch, setOnlyMismatch] = useState(false)
+  const [onlyReview, setOnlyReview] = useState(false)
   const [sort, setSort] = useState<SortKey>('name')
   const [importing, setImporting] = useState(false)
   const [editing, setEditing] = useState<ItemAvailability | null>(null)
@@ -33,10 +112,11 @@ export default function MasterSheet() {
     if (categoryId) list = list.filter((i) => i.category_id === categoryId)
     if (onlyLow) list = list.filter((i) => i.below_min)
     if (onlyMismatch) list = list.filter((i) => Number(i.qty_available) < 0)
+    if (onlyReview) list = list.filter((i) => i.needs_review)
     return [...list].sort((a, b) =>
       sort === 'name' ? a.name.localeCompare(b.name) : Number(b[sort]) - Number(a[sort]),
     )
-  }, [items.data, q, categoryId, onlyLow, onlyMismatch, sort])
+  }, [items.data, q, categoryId, onlyLow, onlyMismatch, onlyReview, sort])
 
   const totals = useMemo(() => {
     const list = items.data ?? []
@@ -53,10 +133,12 @@ export default function MasterSheet() {
       // is never mistaken for the whole picture.
       value: list.reduce((sum, i) => sum + Number(i.stock_value ?? 0), 0),
       unpriced: list.filter((i) => i.unit_cost == null).length,
+      // Quick-added mid-service and still on placeholder details.
+      review: list.filter((i) => i.needs_review).length,
     }
   }, [items.data])
 
-  const filtered = !!(q || categoryId || onlyLow || onlyMismatch)
+  const filtered = !!(q || categoryId || onlyLow || onlyMismatch || onlyReview)
 
   return (
     <div className="space-y-5 max-w-7xl">
@@ -65,6 +147,14 @@ export default function MasterSheet() {
         description="Everything the company owns, and where it currently is."
         actions={
           <>
+            <button
+              className="btn btn-ghost"
+              onClick={() => exportRows(rows)}
+              disabled={rows.length === 0}
+              title="Download what's on screen, filters and all, as a spreadsheet"
+            >
+              Export
+            </button>
             <button className="btn btn-ghost" onClick={() => setImporting((i) => !i)}>
               {importing ? 'Cancel' : 'Import'}
             </button>
@@ -162,6 +252,17 @@ export default function MasterSheet() {
         >
           Below minimum
         </FilterToggle>
+
+        {totals.review > 0 && (
+          <FilterToggle
+            active={onlyReview}
+            onClick={() => setOnlyReview((v) => !v)}
+            tone="warn"
+            count={totals.review}
+          >
+            Needs finishing
+          </FilterToggle>
+        )}
 
         {totals.mismatch > 0 && (
           <FilterToggle
@@ -341,6 +442,14 @@ function Row({ row, onEdit }: { row: ItemAvailability; onEdit: () => void }) {
                 month: 'short',
                 year: 'numeric',
               })}
+            </span>
+          )}
+          {row.needs_review && (
+            <span
+              className="badge badge-warn"
+              title="Added by crew mid-service with placeholder details. Open Edit and confirm its category, unit and pack size."
+            >
+              needs finishing
             </span>
           )}
           {damaged > 0 && (

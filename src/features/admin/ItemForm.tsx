@@ -1,8 +1,21 @@
 import { useState, type FormEvent } from 'react'
-import { createItem, findSimilarItems, setItemPacks, updateItem } from '@/lib/txns'
+import {
+  correctOwnedQty,
+  createItem,
+  findSimilarItems,
+  setItemPacks,
+  updateItem,
+} from '@/lib/txns'
 import { fetchPriceHistory } from '@/lib/queries'
 import { useAsync } from '@/lib/useAsync'
-import { formatMoney, type Category, type Item, type ItemAvailability, type ItemKind } from '@/lib/types'
+import {
+  formatMoney,
+  formatQty,
+  type Category,
+  type Item,
+  type ItemAvailability,
+  type ItemKind,
+} from '@/lib/types'
 
 interface AltPackDraft {
   packSize: string
@@ -81,6 +94,16 @@ export default function ItemForm({
     const size = editItem.pack_label && Number(editItem.pack_size) > 1 ? Number(editItem.pack_size) : 1
     return String(Number((editItem.unit_cost * size).toFixed(2)))
   })
+  /**
+   * What you actually have, in whole packs, so a recount is one number rather
+   * than a trip through Add stock. Saved as a correcting transaction for the
+   * difference, never as an overwrite — see correctOwnedQty.
+   */
+  const ownedPackSize =
+    editItem?.pack_label && Number(editItem.pack_size) > 1 ? Number(editItem.pack_size) : 1
+  const [ownedPacks, setOwnedPacks] = useState(() =>
+    editItem ? String(Number((Number(editItem.qty_owned) / ownedPackSize).toFixed(3))) : '',
+  )
   const [altPacks, setAltPacks] = useState<AltPackDraft[]>(
     (editItem?.alt_packs ?? []).map((p) => ({
       packSize: String(p.pack_size),
@@ -131,11 +154,28 @@ export default function ItemForm({
           .split(',')
           .map((a) => a.trim())
           .filter(Boolean),
+        // Saving this form is a manager confirming the details, which is
+        // exactly what the flag was waiting for.
+        needsReview: false,
       }
 
       let item: Item
       if (isEditing) {
         await updateItem(editItem.item_id, input)
+
+        // A recount is posted as a correction for the difference, so history
+        // records when the number moved rather than losing the old one.
+        const newSize = packSize ? Number(packSize) : 1
+        const targetBase = ownedPacks.trim() === '' ? null : Number(ownedPacks) * newSize
+        if (targetBase != null && Number.isFinite(targetBase)) {
+          await correctOwnedQty(
+            editItem.item_id,
+            Number(editItem.qty_owned),
+            targetBase,
+            'Corrected on the master sheet',
+          )
+        }
+
         item = { ...editItem, ...input, id: editItem.item_id } as unknown as Item
       } else {
         item = await createItem(input)
@@ -271,6 +311,48 @@ export default function ItemForm({
           <span className="text-sm text-fg-muted">SKU (optional)</span>
           <input className="input" value={sku} onChange={(e) => setSku(e.target.value)} />
         </label>
+
+        {/*
+          A recount, without walking through Add stock. Only on edit — a brand
+          new item's opening count belongs on the Add stock screen, where it
+          gets a supplier and a price alongside it.
+        */}
+        {isEditing && (
+          <label className="space-y-1.5">
+            <span className="text-sm font-medium">
+              How many do you have{packLabel ? ` (${packLabel}s)` : ''}?
+            </span>
+            <input
+              className="input tabular"
+              type="number"
+              min={0}
+              step="any"
+              value={ownedPacks}
+              onChange={(e) => setOwnedPacks(e.target.value)}
+            />
+            <span className="block text-xs text-fg-subtle">
+              {(() => {
+                const size = packSize ? Number(packSize) : 1
+                const target = ownedPacks.trim() === '' ? null : Number(ownedPacks) * size
+                const now = Number(editItem.qty_owned)
+                if (target == null || !Number.isFinite(target)) return 'Leave blank to keep it as it is.'
+                const delta = Number((target - now).toFixed(3))
+                if (delta === 0) return `Unchanged — ${formatQty(now, editItem)} on the books.`
+                return delta > 0
+                  ? `Adds ${formatQty(delta, editItem)}, recorded as stock found.`
+                  : `Removes ${formatQty(-delta, editItem)}, recorded as stock gone.`
+              })()}
+            </span>
+            {Number(editItem.qty_out) > 0 && (
+              /* Out is somebody's responsibility, not a number to overwrite —
+                 clearing it here would erase who has what. */
+              <span className="block text-xs text-warn-700">
+                {formatQty(editItem.qty_out, editItem)} is still out with the crew. That comes
+                back through Bring back, so it isn't editable here.
+              </span>
+            )}
+          </label>
+        )}
 
         <label className="space-y-1.5">
           <span className="text-sm text-fg-muted">Minimum stock</span>

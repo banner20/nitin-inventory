@@ -61,6 +61,37 @@ export async function postTxn(input: PostTxnInput): Promise<string> {
   return data as string
 }
 
+/**
+ * Correct what the app thinks you own, without walking through Add stock.
+ *
+ * The ledger is append-only, so a corrected count isn't an overwrite — it's a
+ * transaction for the difference. Finding two more bottles than the books say
+ * is stock arriving; finding two fewer is stock gone. Recording it that way
+ * keeps the history honest about when the number changed and by how much,
+ * which a silent edit would destroy.
+ *
+ * `note` is what the audit trail will say. Returns the size of the correction
+ * so the caller can report it.
+ */
+export async function correctOwnedQty(
+  itemId: string,
+  currentBase: number,
+  targetBase: number,
+  note: string,
+  clientUuid?: string,
+): Promise<number> {
+  const delta = Number((targetBase - currentBase).toFixed(3))
+  if (delta === 0) return 0
+
+  await postTxn({
+    type: delta > 0 ? 'ADD' : 'WRITEOFF',
+    lines: [{ item_id: itemId, qty: Math.abs(delta) }],
+    note,
+    clientUuid,
+  })
+  return delta
+}
+
 export async function fetchCategories(): Promise<Category[]> {
   const { data, error } = await supabase
     .from('categories')
@@ -90,10 +121,12 @@ export interface NewItemInput {
    * opening balance or to correct a figure by hand.
    */
   unitCost?: number | null
+  /** Clear once a manager has confirmed a quick-added item's details. */
+  needsReview?: boolean
 }
 
 const ITEM_COLUMNS =
-  'id, name, category_id, unit, sku, min_stock, aliases, photo_url, notes, active, kind, pack_size, pack_label, expiry_date, unit_cost'
+  'id, name, category_id, unit, sku, min_stock, aliases, photo_url, notes, active, kind, pack_size, pack_label, expiry_date, unit_cost, needs_review'
 
 export async function createItem(input: NewItemInput): Promise<Item> {
   const { data, error } = await supabase
@@ -110,6 +143,7 @@ export async function createItem(input: NewItemInput): Promise<Item> {
       pack_label: input.packLabel?.trim() || null,
       expiry_date: input.expiryDate || null,
       unit_cost: input.unitCost ?? null,
+      needs_review: input.needsReview ?? false,
     })
     .select(ITEM_COLUMNS)
     .single()
@@ -136,6 +170,7 @@ export async function updateItem(id: string, patch: Partial<NewItemInput>): Prom
   if (patch.packLabel !== undefined) body.pack_label = patch.packLabel?.trim() || null
   if (patch.expiryDate !== undefined) body.expiry_date = patch.expiryDate || null
   if (patch.unitCost !== undefined) body.unit_cost = patch.unitCost
+  if (patch.needsReview !== undefined) body.needs_review = patch.needsReview
 
   const { error } = await supabase.from('items').update(body).eq('id', id)
   if (error) throw new Error(error.message)

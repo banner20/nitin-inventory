@@ -55,6 +55,8 @@ export interface Item {
   expiry_date: string | null
   /** Current price of one base unit. See ItemAvailability.unit_cost. */
   unit_cost: number | null
+  /** Created in a hurry by crew and still carrying placeholder details. */
+  needs_review: boolean
 }
 
 /**
@@ -112,6 +114,12 @@ export interface ItemAvailability {
    * file, so "we don't know what this is worth" stays distinguishable from
    * "it's worth nothing". */
   stock_value: number | null
+  /**
+   * Quick-added mid-service with a name and nothing else. Flagged so a
+   * manager can set the category, unit and pack size before it quietly
+   * miscounts itself.
+   */
+  needs_review: boolean
   /** Read from purchase history, not stored — the last ADD line's vendor,
    * cost, and when. Answers "who did we last buy this from, and for how
    * much" without a static field that can silently go stale. */
@@ -232,6 +240,7 @@ export function toItemAvailability(item: Item, categories: Category[]): ItemAvai
     expiry_date: item.expiry_date,
     unit_cost: item.unit_cost,
     stock_value: item.unit_cost == null ? null : 0,
+    needs_review: item.needs_review,
     last_vendor: null,
     last_unit_cost: null,
     last_purchased_at: null,

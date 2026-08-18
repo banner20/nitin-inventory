@@ -207,6 +207,10 @@ export default function TakeOut() {
         minStock: 0,
         kind: 'consumable',
         aliases: [],
+        // Everything above except the name is a placeholder. Flagging it means
+        // the master sheet asks a manager to finish the job rather than the
+        // stub blending in and quietly counting itself wrong.
+        needsReview: true,
       })
       const withStock = toItemAvailability(created, [])
       setBasket((b) => [
