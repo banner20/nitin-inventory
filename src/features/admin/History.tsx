@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react'
 import clsx from 'clsx'
 import { amendTxn, fetchTxnHistory, voidTxn } from '@/lib/queries'
+import {
+  AmountInput,
+  amountToBase,
+  packOptions,
+  type AmountMode,
+} from '@/components/AmountInput'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { formatPacks } from '@/lib/types'
 import type { TxnHistoryEntry, TxnType } from '@/lib/types'
@@ -167,8 +173,9 @@ function HistoryRow({
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  /** The quantities as typed, in the item's own pack, keyed by line index. */
-  const [draft, setDraft] = useState<Record<number, string>>({})
+  /** What's been typed per line, and which size it's being typed in — the
+   * same pairing the take-out screen uses. */
+  const [draft, setDraft] = useState<Record<number, { amount: string; mode: AmountMode }>>({})
 
   const who = entry.actor_name
     ? `${entry.actor_name}${entry.actor_emp_code ? ` (${entry.actor_emp_code})` : ''}`
@@ -182,15 +189,27 @@ function HistoryRow({
   const canUndo = !voided && (isManager || entry.created_by === profile?.id)
   const lines = entry.lines ?? []
 
-  /** Pack-size helper: quantities are stored in base units but read and typed
-   * in whole bottles, same as everywhere else. */
-  const sizeOf = (l: (typeof lines)[number]) =>
-    l.pack_label && Number(l.pack_size) > 1 ? Number(l.pack_size) : 1
+  /**
+   * Open each line on the size that reads most cleanly: the biggest pack the
+   * amount divides into evenly, or the raw unit when nothing does. 1400ml of a
+   * 700ml bottle opens as "2 bottles"; 250ml opens as "250 ml" rather than
+   * "0.357 bottles".
+   */
+  function tidiestMode(line: (typeof lines)[number]): AmountMode {
+    const qty = Number(line.qty)
+    const options = [...packOptions(line)].sort((a, b) => b.size - a.size)
+    const clean = options.find((o) => qty > 0 && Math.abs(qty % o.size) < 0.001)
+    return clean?.id ?? 'base'
+  }
 
   function startEditing() {
     setDraft(
       Object.fromEntries(
-        lines.map((l, i) => [i, String(Number((Number(l.qty) / sizeOf(l)).toFixed(3)))]),
+        lines.map((l, i) => {
+          const mode = tidiestMode(l)
+          const size = packOptions(l).find((o) => o.id === mode)?.size ?? 1
+          return [i, { amount: String(Number((Number(l.qty) / size).toFixed(3))), mode }]
+        }),
       ),
     )
     setError(null)
@@ -202,12 +221,16 @@ function HistoryRow({
     setError(null)
     try {
       const next = lines
-        .map((l, i) => ({
-          item_id: l.item_id,
-          qty: Number((Number(draft[i] ?? 0) * sizeOf(l)).toFixed(3)),
-          condition: l.condition,
-          from_loose: l.from_loose,
-        }))
+        .map((l, i) => {
+          const d = draft[i]
+          return {
+            item_id: l.item_id,
+            // Whatever unit it was typed in, the ledger takes base units.
+            qty: d ? Number(amountToBase(d.amount, d.mode, l).toFixed(3)) : 0,
+            condition: l.condition,
+            from_loose: l.from_loose,
+          }
+        })
         // A line dropped to zero is a line removed. All of them at zero means
         // the entry shouldn't exist — undo it instead, which the DB enforces.
         .filter((l) => l.qty > 0)
@@ -295,26 +318,37 @@ function HistoryRow({
       {lines.length > 0 && (
         <ul className="text-sm divide-y divide-line border-t border-line -mx-4 px-4">
           {lines.map((line, i) => (
-            <li key={i} className="py-1.5 flex items-center justify-between gap-3">
-              <span className="text-sm truncate">{line.item_name}</span>
-              {editing ? (
-                /* Typed in whole bottles, like everywhere else; converted back
-                   to base units on save. Zero drops the line. */
-                <span className="flex items-center gap-2 shrink-0">
-                  <input
-                    className="input tabular text-center w-20 h-9 min-h-9"
-                    type="number"
-                    min={0}
-                    step="any"
-                    value={draft[i] ?? ''}
-                    onChange={(e) => setDraft((d) => ({ ...d, [i]: e.target.value }))}
-                    aria-label={`Amount of ${line.item_name}`}
-                  />
-                  <span className="text-xs text-fg-muted w-16">
-                    {line.pack_label && Number(line.pack_size) > 1
-                      ? `${line.pack_label}s`
-                      : line.unit}
+            <li
+              key={i}
+              className={clsx(
+                'py-1.5 gap-3',
+                editing
+                  ? 'flex flex-col items-start gap-2'
+                  : 'flex items-center justify-between',
+              )}
+            >
+              <span className="text-sm truncate">
+                {line.item_name}
+                {editing && line.condition && line.condition !== 'ok' && (
+                  <span className="ml-2 text-xs text-warn-600">
+                    {CONDITION_LABEL[line.condition] ?? line.condition}
                   </span>
+                )}
+              </span>
+              {editing ? (
+                /* The same control as the take-out screen: pick the size, then
+                   the amount. Zero drops the line. */
+                <span className="shrink-0">
+                  <AmountInput
+                    item={line}
+                    amount={draft[i]?.amount ?? '0'}
+                    mode={draft[i]?.mode ?? 'base'}
+                    withSteppers
+                    ariaLabel={`Amount of ${line.item_name}`}
+                    onChange={(amount, mode) =>
+                      setDraft((d) => ({ ...d, [i]: { amount, mode } }))
+                    }
+                  />
                 </span>
               ) : (
                 <span className="text-fg-muted tabular shrink-0 flex items-center gap-2">

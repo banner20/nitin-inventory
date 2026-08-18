@@ -410,6 +410,9 @@ export interface TxnHistoryLine {
   vendor: string | null
   pack_size: number
   pack_label: string | null
+  /** Every size this item is stocked in, so a correction can be typed in the
+   * same units it was recorded in. */
+  alt_packs: AltPack[] | null
 }
 
 /** One row per transaction — who did it, for what, and what it contained. */
